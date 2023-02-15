@@ -1,0 +1,119 @@
+%&v8_handles_paper_preamble
+\endofdump
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+    Abstract goes here
+\end{abstract}
+
+
+\section{Introduction}
+
+Like many other modern language runtimes, Chrome's V8 JavaScript engine uses
+garbage collection (GC) to manage its dynamically allocated memory. The V8 heap
+is managed with a mark-sweep collector, which periodically traces objects, and
+then free those which are unreachable. V8 is often embedded into other
+applications, such as Chrome's Blink rendering engine, so its garbage collector
+must be able to track objects which are referenced externally through a
+(potentially unmanaged) embedder.
+
+V8 developers do not obtain pointers to JavaScript objects directly. Instead
+\textit{handles} are used to encode a two-level indirection to JavaScript
+objects. A handle acts as a root for garbage collection, where it stores the
+pointer to an object in a fixed place in the VM, and developers reference the
+object through a pointer to its handle.
+
+The beauty of this scheme is that collectively, handles implicitly encode the
+GC’s root set of objects, and JavaScript objects can be moved easily while it
+they are still referenced, since only the value stored in a handle needs to be
+updated. However, this simplicity comes with a performance cost: each heap
+object dereference requires two (nested) pointer dereferences, with inevitable
+consequences for code size, cache behaviour, and static optimisations. There is
+also a performance cost to creating and destroying the blocks in the VM which
+contain these handles. Handles in V8 also have an ergonomic trade-off, they
+require V8 developers to respect various rules that cannot be fully encoded in
+\cpp's type system. While linting tools are provided to ensure rules around
+handles are followed, violations can lead to unsoundness.
+
+\jake{Feel like we need a paragraph here explaining why we decided that we'd
+prefer now to add complexity to get the performance}
+
+In this paper we describe a practical scheme for gradually migrating V8 from
+indirect to direct handles, making such a transition plausible without a single,
+disruptive change. We then show that, for the portions of the transition that we
+have implemented, direct handles are faster than indirect handles.
+
+This papers contributions are as follows:
+
+\jake{tumbleweed...}
+
+This paper is structured as follows. We first introduce Chrome and its existing
+memory management implementation (Section \ref{sec:background}). In Section
+\ref{sec:direct_handles} we detail how we switched most parts of V8 to directly
+reference JavaScript objects. We show how we use conservative stack scanning to
+identify the rootset for garbage collection instead. We evaluate the impact of
+both handles and direct references in Section \ref{sec:evaluation}. Finally, we
+discuss related work in Section \ref{sec:related}, and then offer our
+conclusions in Section \ref{sec:conclusion}.
+\section{Background}
+\label{sec:background}
+In this section, we give a brief overview of V8 and how its memory management
+works.
+\subsection{V8 garbage collection basics}
+V8 is a high-performance JavaScript virtual machine (VM). It can be used as a
+standalone application or embedded into larger applications such as Chrome or
+NodeJS using its \cpp API.
+
+V8 has a generational garbage collector with the JavaScript heap split into two
+distinct sections for young and old object collection. The smaller young
+generation is a Cheney style semi-space scavenger divided into two contiguous
+fixed size blocks of memory known as \textit{tospace} and \textit{fromspace}.
+Objects are bump allocated in fromspace until it is full, at which point live
+objects are moved to tospace which becomes the new young generation heap and so
+on. Objects which have been moved more than once in the young generation are
+promoted to the old generation.
+
+The old generation is a mark-sweep-compact collector. Marking is performed
+concurrently to the main thread of JavaScript execution to reduce pause times.
+Dijkstra style write barriers are used when object fields are written to on the
+main thread to maintain the tri-colour marking scheme. Sweeping is also
+performed concurrently to the main thread and makes use of parallel worker
+threads. Surviving objects are then compacted to reduce memory fragmentation.
+Compaction is not done concurrently to the main thread, however, in Chrome it
+makes use of idle time to reduce the impact of the GC pause.
+
+
+\subsection{Blink as an API consumer}
+\subsection{Handle infrastructure}
+V8’s current indirect handles have a fairly complex underlying mechanism that is
+best explained in stages. Before a V8 programmer can obtain a reference to a
+JavaScript object, they must first create a handle scope, which implicitly
+becomes the “active” handle scope. When a reference to a JavaScript object is
+requested, an indirect handle is created, and added to the most recent handle
+scope. When the handle scope object is deleted at run-time, all the indirect
+handles created since the beginning of the handle scope’s lifetime are deleted
+together, and the previous handle scope becomes the active handle scope. At any
+point the GC can ask a handle scope to enumerate all the indirect handles it
+refers to.
+
+Indirect handles contain a pointer-sized value. That value points to a member of
+an intermediate set called a handle block. Handle blocks are never moved in
+memory, so pointers to a member of a handle block are always stable. Each member
+of a handle block points to a JavaScript object.
+\section{Removing Handles}
+\label{sec:direct_handles}
+\section{Evaluation}
+\label{sec:evaluation}
+\section{Related Work}
+\label{sec:related}
+\section{Conclusions}
+\label{sec:conclusion}
+
+\cite{jones16garbage}
+
+\bibliographystyle{plain}
+\bibliography{bib}
+
+\end{document}
