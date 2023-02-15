@@ -1,0 +1,45 @@
+\documentclass[a4paper]{article}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+
+\usepackage{booktabs}
+\usepackage{courier}
+\usepackage{hyperref}
+\usepackage{listings}
+\usepackage{microtype}
+\usepackage[numbers]{natbib}
+\usepackage{softdev}
+\usepackage{tikz}
+\usepackage{xspace}
+
+\usetikzlibrary{automata, positioning, arrows}
+
+\lstset{
+    basicstyle=\ttfamily,
+    xleftmargin=\parindent,
+    numbers=left,
+    numbersep=.8em,
+    numberstyle=\tiny\tt\color{gray},
+    captionpos=b,
+    escapeinside={{<!}{!>}},
+    commentstyle=\color{gray}\itshape,
+    keywordstyle=\textbf,
+}
+
+% from https://tex.stackexchange.com/questions/264361/skipping-line-numbers-in-lstlisting#264373
+\let\origthelstnumber\thelstnumber
+\makeatletter
+\newcommand*\Suppressnumber{%
+  \lst@AddToHook{OnNewLine}{%
+    \let\thelstnumber\relax%
+     \advance\c@lstnumber-\@ne\relax%
+    }%
+}
+
+\newcommand\cpp{C\texttt{++}\xspace}
+\newcommand\veight{\textsc{v8}\xspace}
+\newcommand\blink{\textsc{v8}\xspace}
+
+\title{Removing Handle Indirection in V8}
+\author{Jacob Hughes, Laurence Tratt}
