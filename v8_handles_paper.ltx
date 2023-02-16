@@ -86,7 +86,7 @@ promoted to the old generation.
 
 The old generation is a mark-sweep-compact collector. Marking is performed
 concurrently to the main thread of JavaScript execution to reduce pause times.
-Dijkstra style write barriers are used when object fields are written to on the
+Dijkstra style write barriers \jake{cite} are used when object fields are written to on the
 main thread to maintain the tri-colour marking scheme. Sweeping is also
 performed concurrently to the main thread and makes use of parallel worker
 threads. Surviving objects are then compacted to reduce memory fragmentation.
@@ -95,7 +95,17 @@ makes use of idle time to reduce the impact of the GC pause.
 
 
 \subsection{Blink as an API consumer}
+
+Handles (and handle scopes) are internal V8 concepts which are not exposed in
+the external API. Instead the API bindings layer exposes locals — a separate
+class which mirrors a subset of the indirect handle API. Like indirect handles,
+locals use two-level indirection to JavaScript objects, and are converted to
+indirect V8 handles when they cross the boundary into the V8 C++ runtime. This
+conversion to and from indirect handles takes place through OpenHandle and
+ToLocal, respectively.
+
 \subsection{Handle infrastructure}
+
 V8’s current indirect handles have a fairly complex underlying mechanism that is
 best explained in stages. Before a V8 programmer can obtain a reference to a
 JavaScript object, they must first create a handle scope, which implicitly
@@ -111,12 +121,109 @@ Indirect handles contain a pointer-sized value. That value points to a member of
 an intermediate set called a handle block. Handle blocks are never moved in
 memory, so pointers to a member of a handle block are always stable. Each member
 of a handle block points to a JavaScript object.
+
+V8 makes use of indirect handles to store Small Integer Objects (SMIs), that is
+JavaScript integers that are not boxed on the heap. An important case is the SMI
+0 and the null pointer: V8 encodes them in a way that allows them to be
+efficiently differentiated. Indirect handles that have an internal value of NULL
+represent a null pointer (and thus cannot be dereferenced to a handle block
+member). Handle block members with an interior value whose least significant bit
+is 0 encode a SMI; if the same bit is 1 a pointer is encoded.
+
 \section{Removing Handles}
 \label{sec:direct_handles}
+\subsection{Direct object pointers}
+\subsection{Conservative Stack Scanning}
 \section{Evaluation}
 \label{sec:evaluation}
 \section{Related Work}
 \label{sec:related}
+
+In this section we outline how garbage collectors in other virtual machines
+solve the problem of identifying roots. We first look at how other industrial
+web browsers approach this, as they face similar challenges as Chrome with
+managing the interaction between distinct DOM and JavaScript heaps. We then look
+at how handles in particular have been used in other virtual machines. Finally,
+we look at how conservative stack scanning has been used in systems and
+languages which are typically uncooperative towards garbage collection.
+
+\subsection{Other browsers}
+
+Like Chrome, other popular web browsers such as Firefox, Safari use separate
+heaps for both DOM and JavaScript objects. Electron (a framework for building
+desktop apps), and the Opera web browser are based on V8 and Blink, so they use
+the same Handle (V8) and conservative stack scanning (Blink oilpan) approach as
+Chrome to identify garbage collection roots.
+
+Firefox's JavaScript engine, SpiderMonkey, \cite{spidermonkey} has a precise, moving
+garbage collector. Like V8, it uses handles to achieve this. Spidermonkey
+developers must ensure that each pointer to a JavaScript object on the stack is
+registered as root for garbage collection. Additional references to a JavaScript
+object can then be created, which access it indirectly through the originally
+rooted value. Rooted values are registered in lists based on scope, with
+persistent handles available for longer living roots. Handles cannot be stored
+on the heap as they could end up outliving their root.\cite{spidermonkeygc} SpiderMonkey
+uses a static analysis tool to make sure that raw pointers are not accidentally
+put on the stack when a garbage collection can take place. The Gecko Rendering
+engine is used in firefox. It is written in C++ and manages its DOM heap with
+reference counting. It implements a cycle collector based on
+\cite{bacon01concurrent}.
+
+Safari's JavaScript engine, Riptide, uses conservative stack scanning to locate
+roots for garbage collection \cite{pizlo17riptide}. It stores direct pointers to
+JavaScript heap objects in C++, assembly, and JIT'ed code without any additional
+bookkeeping to inform the collector of root locations. It performs non-moving
+generational collection using sticky mark bits \cite{demers89combining}.
+Safari's WebKit \cite{webkit} rendering engine is implemented in C++ and uses
+reference counting to manage its DOM tree. JavaScript wrapper objects in Riptide
+maintain a reference count to their objects on the DOM.
+
+\subsection{Handle based garbage collection}
+
+Handle based garbage collected systems are most commonly associated with early
+versions of Smalltalk and JVM implementations.
+
+Perhaps the most well known example of handles used in an industrial-strength VM
+is the implementation of the Java Native Interface (JNI) in the HotSpot JVM. The
+JNI allows code written in other languages to access objects on the Java heap.
+Java objects are added to a table of registered objects and accessed through a
+level of indirection when used externally. The collector treats this table as
+an additional set of roots.
+
+Compact-fit\cite{craciunas08compacting} is a compacting allocator which uses handles to allow objects to
+move. It consists of two conceptual memory layers: the \textit{abstract address
+space}; and the \textit{concrete address space}. Direct pointers to objects
+allocated in the concrete address space are not possible. The application
+operates on pointers to the abstract address space which are managed by handles.
+Object headers have back-pointers to their canonical handle.
+
+The most comprehensive study of handles to our knowledge is
+\cite{kalibera11handles}. They showed how moving handle-based VMs do not suffer
+from \textit{copy reserve overhead}, where the old copy of a moved object must
+be kept around until the mutator only holds references to the new object
+location. Instead, with handles, the space used by evacuated objects can be
+reused immediately as only the handle's address needs updating. With careful
+optimisations, they showed that a handle-based system has same execution time
+overheads as a Brooks-style compacting collector. Some of the ways they describe
+that handles can be optimisated are: using \textit{fat handles} to store
+commonly accessed header information along with the object pointer; grouping
+handles of objects that live and die together to reduce fragmentation in handle
+blocks; and short-circuiting handles for pinned objects.
+
+\subsection{Conservative Stack Scanning}
+
+The most well known use of conservative stack scanning for garbage
+collection is the Boehm-Demers-Weiser collector\cite{boehm88garbage}: a
+collector for C and C++. \jake{Should I mention oilpan here? Or is it too
+"Chrome" to be considered related?} Other conservative collectors for unmanaged
+languages are the .
+
+%TODO: Managed language collectors:
+% - Fast CSS: https://users.cecs.anu.edu.au/~steveb/pubs/papers/consrc-oopsla-2014.pdf
+% - Hybrid CSS: https://www.usenix.org/legacy/events/jvm01/full_papers/barabash/barabash.pdf
+% - Forkscan Reclamation: https://dspace.mit.edu/bitstream/handle/1721.1/123336/forkscan-eurosys-17.pdf
+% - Sound GC for C using taint analysis: https://dl.acm.org/doi/pdf/10.1145/3428244
+
 \section{Conclusions}
 \label{sec:conclusion}
 
