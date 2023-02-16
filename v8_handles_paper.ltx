@@ -4,7 +4,13 @@
 \begin{document}
 
 \begin{abstract}
-    Abstract goes here
+The merits of direct and indirect handles for Garbage Collection (GC) have
+long been debated. V8 has traditionally used indirect handles to allow
+precise garbage collection. In this paper we first show that it is possible
+to gradually migrate from (seemingly fundamental) indirect handles to direct
+handles. We then migrate a substantial portion of V8 to use direct handles.
+For the portion of V8 we have migrated, we show that direct handles are
+faster than indirect handles.
 \end{abstract}
 
 
@@ -16,7 +22,7 @@
 Like many other modern language runtimes, Chrome's V8 JavaScript engine uses
 garbage collection (GC) to manage its dynamically allocated memory. The V8 heap
 is managed with a mark-sweep collector, which periodically traces objects, and
-then free those which are unreachable. V8 is often embedded into other
+then frees those which are unreachable. V8 is often embedded into other
 applications, such as Chrome's Blink rendering engine, so its garbage collector
 must be able to track objects which are referenced externally through a
 (potentially unmanaged) embedder.
@@ -41,6 +47,7 @@ handles are followed, violations can lead to unsoundness.
 
 \jake{Feel like we need a paragraph here explaining why we decided that we'd
 prefer now to add complexity to get the performance}
+\laurie{i think the answer is `history'?}
 
 In this paper we describe a practical scheme for gradually migrating V8 from
 indirect to direct handles, making such a transition plausible without a single,
@@ -70,7 +77,7 @@ NodeJS using its \cpp API.
 
 V8 has a generational garbage collector with the JavaScript heap split into two
 distinct sections for young and old object collection. The smaller young
-generation is a Cheney style semi-space scavenger divided into two contiguous
+generation is a Cheney style semi-space scavenger \laurie{cite} divided into two contiguous
 fixed size blocks of memory known as \textit{tospace} and \textit{fromspace}.
 Objects are bump allocated in fromspace until it is full, at which point live
 objects are moved to tospace which becomes the new young generation heap and so
@@ -92,7 +99,7 @@ makes use of idle time to reduce the impact of the GC pause.
 V8’s current indirect handles have a fairly complex underlying mechanism that is
 best explained in stages. Before a V8 programmer can obtain a reference to a
 JavaScript object, they must first create a handle scope, which implicitly
-becomes the “active” handle scope. When a reference to a JavaScript object is
+becomes the ``active'' handle scope. When a reference to a JavaScript object is
 requested, an indirect handle is created, and added to the most recent handle
 scope. When the handle scope object is deleted at run-time, all the indirect
 handles created since the beginning of the handle scope’s lifetime are deleted
