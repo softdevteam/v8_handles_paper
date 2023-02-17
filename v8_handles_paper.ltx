@@ -211,13 +211,10 @@ use direct pointers and conservative stack scanning~\cite{pizlo17riptide},
 which is very similar to what we propose for V8 in this paper. WebKit has had
 at least two different GCs over time (the current GC, \cite{pizlo17riptide},
 mostly runs concurrently to JavaScript execution, similarly to V8), but this has not
-changed the details relevant to this paper. Unlike V8, WebKit's GC does not
-move objects, instead using `sticky mark bits' that implicitly mark a given
-object as belonging to a certain generation \jake{while this is true. It doesn't
-really read correctly to me here. "moving" is not just about generational GC -
-though its certainly involved in some approaches (e.g. scavenger!) - so i don't
-think it's right to say "sticky mark bits instead of moving". How about: ...does
-not move objects, even across generations, instead, `sticky mark bits`...}. Where V8 only uses precise stack scanning
+changed the details relevant to this paper. Unlike V8, WebKit's GC never
+moves objects, even across generations (instead using `sticky mark bits' that implicitly mark a given
+object as belonging to a certain generation).
+Where V8 only uses precise stack scanning
 for C/C++ code, using stackmaps for JIT compiled code, WebKit uses conservative stack scanning for
 both C/C++ code and JIT compiled code, marginally increasing the chances of
 `accidental' object marking.
