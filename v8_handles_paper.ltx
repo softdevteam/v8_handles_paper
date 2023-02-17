@@ -210,8 +210,12 @@ Safari's underlying engine WebKit (of which the JavaScript VM, JSC, is a part)
 use direct pointers and conservative stack scanning~\cite{pizlo17riptide},
 which is very similar to what we propose for V8 in this paper. WebKit has had
 at least two different GCs over time (the current GC, \cite{pizlo17riptide},
-runs in parallel to JavaScript execution, similarly to V8), but this has not
-changed the details relevant to this paper. WebKit's GCs move objects; as we
+runs in parallel to JavaScript execution \jake{Did you mean concurrently here?
+In GC parlance parallel tends describe parallelising the GC's workload, but concurrently means
+it runs at the same time as the mutator.}that , similarly to V8), but this has not
+changed the details relevant to this paper. WebKit's GCs move objects; \jake{I'm
+fairly certain this is not true. WebKit is a non-moving GC. To move objects
+between generations, it uses sticky mark bits like in Boehm}as we
 propose for V8, when conservative scanning references an object, that object is
 pinned, and cannot be moved. Unlike V8, which uses precise stack scanning use
 stackmaps, WebKit uses conservative stack scanning for JIT compiled code, so
