@@ -210,16 +210,13 @@ Safari's underlying engine WebKit (of which the JavaScript VM, JSC, is a part)
 use direct pointers and conservative stack scanning~\cite{pizlo17riptide},
 which is very similar to what we propose for V8 in this paper. WebKit has had
 at least two different GCs over time (the current GC, \cite{pizlo17riptide},
-runs in parallel to JavaScript execution \jake{Did you mean concurrently here?
-In GC parlance parallel tends describe parallelising the GC's workload, but concurrently means
-it runs at the same time as the mutator.}that , similarly to V8), but this has not
-changed the details relevant to this paper. WebKit's GCs move objects; \jake{I'm
-fairly certain this is not true. WebKit is a non-moving GC. To move objects
-between generations, it uses sticky mark bits like in Boehm}as we
-propose for V8, when conservative scanning references an object, that object is
-pinned, and cannot be moved. Unlike V8, which uses precise stack scanning use
-stackmaps, WebKit uses conservative stack scanning for JIT compiled code, so
-there is a marginally increased chance of `accidental' object marking.
+mostly runs concurrently to JavaScript execution, similarly to V8), but this has not
+changed the details relevant to this paper. Unlike V8, WebKit's GC does not
+move objects, instead using `sticky mark bits' that implicitly mark a given
+object as belonging to a certain generation. Where V8 only uses precise stack scanning
+for C/C++ code, using stackmaps for JIT compiled code, WebKit uses conservative stack scanning for
+both C/C++ code and JIT compiled code, marginally increasing the chances of
+`accidental' object marking.
 
 \laurie{is there anything novel about this paper w.r.t. handles? if it's just
 that it uses handles to allow moving, that seems the same as all the earlier
