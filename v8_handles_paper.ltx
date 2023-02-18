@@ -4,13 +4,12 @@
 \begin{document}
 
 \begin{abstract}
-The merits of direct and indirect handles for Garbage Collection (GC) have
-long been debated. V8 has traditionally used indirect handles to allow
-precise garbage collection. In this paper we first show that it is possible
-to gradually migrate from (seemingly fundamental) indirect handles to direct
-handles. We then migrate a substantial portion of V8 to use direct handles.
-For the portion of V8 we have migrated, we show that direct handles are
-faster than indirect handles.
+The performance merits of using handles or direct references for garbage
+collection have long been debated, but there are few published
+comparisons. In this paper we provide concrete evidence by migrating a
+substantial portion of V8, a modern JavaScript virtual machine, from
+handles to direct references. On standard V8 benchmark suites, the use
+of direct references improves performance by \laurie{X\%}.
 \end{abstract}
 
 
@@ -19,20 +18,57 @@ faster than indirect handles.
 
 \section{Introduction}
 
-Like many other modern language runtimes, Chrome's V8 JavaScript engine uses
-garbage collection (GC) to manage its dynamically allocated memory. The V8 heap
-is managed with a mark-sweep collector, which periodically traces objects, and
-then frees those which are unreachable. V8 is often embedded into other
-applications, such as Chrome's Blink rendering engine, so its garbage collector
-must be able to track objects which are referenced externally through a
-(potentially unmanaged) embedder.
+A major challenge with Garbage Collection (GC) is finding all the \emph{roots}
+(i.e.~the starting set of references into the object graph). Many languages,
+notably C/C++, and many compilers, provide no way to precisely enumerate the
+roots. This is a challenge for programming language Virtual Machines (VMs)
+written in C/C++ and which implement GCed languages (e.g.~LISP, Java,
+or JavaScript): when using \emph{direct references} to objects, roots
+can be `lost' on the C/C++ call stack.
 
-V8 developers do not obtain pointers to JavaScript objects directly. Instead
-\textit{handles} are used to encode a two-level indirection to JavaScript
-objects. A handle acts as a root for garbage collection, where it stores the
-pointer to an object in a fixed place in the VM, and developers reference the
-object through a pointer to its handle.
+Compiler support for \emph{stackmaps} allows precise scanning of the C/C++ call
+stack to uncover all direct references: unfortunately, GCC has no support for
+stackmaps, and LLVM's support is incomplete and unsupported. In practise,
+nearly all VMs thus have to make a choice. If they want to use direct references,
+they must use \emph{conservative stack scanning}, which considers every word on
+the stack to be a potential pointer: if that `pointer' references a GCed
+object, then the `pointer' is considered a root. This over-approximates the
+roots: words that are not pointers can accidentally keep alive objects.
+\emph{Handles} (first introduced in recognisable form
+by~\cite{brooks84trading}, though the term `handles' was only used later) add a
+layer of indirection to object references. A handle is stored at a fixed point
+in memory, allowing the \emph{pool} of handles to be easily enumerated as
+roots. The object a handle refers to can then move in memory. This provides
+accurate enumeration of the roots, but can be awkward to program with.
 
+The relative merits of direct references and handles have been a talking point
+in GC research for decades. In particular, many have strong opinions on the
+performance of each approach: conservative stack scanning wastes time examining
+words that can never be pointers; and handles require two dereferences to reach
+an object. However, there is a dearth of performance comparisons since
+VMs typically choose at the outset to use one approach or the other.
+
+In this paper we examine the widely used JavaScript VM \emph{V8}, which has
+been designed from its inception to use handles. Our fundamental hypothesis is
+that moving from handles to direct references will improve V8's performance.
+However, moving wholesale from handles to direct references is impractical on a
+codebase of V8's size \laurie{how many LoC is V8?}, so our first challenge was
+to find a practical means for gradually migrating parts of V8 from handles to
+direct references (Section~\ref{sec:migration}). Having then migrated a
+substantial portion of V8 from handles to direct references \laurie{can we give
+a rough fraction/percentage?}, we then run several standard V8 benchmark
+suites, and find that direct references improve performance by \laurie{X\%}
+(Section~\ref{sec:evaluation}). We believe this validates our hypothesis in the
+context of V8: it may also provide a useful example for other VMs when
+considering direct references and handles.
+
+
+\section{Background}
+\label{sec:background}
+In this section, we give a brief overview of V8 and how its memory management
+works.
+
+\subsection{Handles}
 The beauty of this scheme is that collectively, handles implicitly encode the
 GC’s root set of objects, and JavaScript objects can be moved easily while it
 they are still referenced, since only the value stored in a handle needs to be
@@ -45,31 +81,7 @@ require V8 developers to respect various rules that cannot be fully encoded in
 \cpp's type system. While linting tools are provided to ensure rules around
 handles are followed, violations can lead to unsoundness.
 
-\jake{Feel like we need a paragraph here explaining why we decided that we'd
-prefer now to add complexity to get the performance}
-\laurie{i think the answer is `history'?}
 
-In this paper we describe a practical scheme for gradually migrating V8 from
-indirect to direct handles, making such a transition plausible without a single,
-disruptive change. We then show that, for the portions of the transition that we
-have implemented, direct handles are faster than indirect handles.
-
-This papers contributions are as follows:
-
-\jake{tumbleweed...}
-
-This paper is structured as follows. We first introduce Chrome and its existing
-memory management implementation (Section \ref{sec:background}). In Section
-\ref{sec:direct_handles} we detail how we switched most parts of V8 to directly
-reference JavaScript objects. We show how we use conservative stack scanning to
-identify the rootset for garbage collection instead. We evaluate the impact of
-both handles and direct references in Section \ref{sec:evaluation}.
-
-
-\section{Background}
-\label{sec:background}
-In this section, we give a brief overview of V8 and how its memory management
-works.
 \subsection{V8 garbage collection basics}
 V8 is a high-performance JavaScript virtual machine (VM). It can be used as a
 standalone application or embedded into larger applications such as Chrome or
@@ -130,8 +142,9 @@ represent a null pointer (and thus cannot be dereferenced to a handle block
 member). Handle block members with an interior value whose least significant bit
 is 0 encode a SMI; if the same bit is 1 a pointer is encoded.
 
-\section{Removing Handles}
-\label{sec:direct_handles}
+\section{Gradually Migrating from Handles to Direct References}
+\label{sec:migration}
+
 \subsection{Direct object pointers}
 \subsection{Conservative Stack Scanning}
 \section{Evaluation}
