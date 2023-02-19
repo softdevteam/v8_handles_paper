@@ -123,7 +123,23 @@ but (as some of this paper's authors have discovered in other work), it
 is experimental, incomplete, and unsupported, with particular problems at
 higher optimisation levels.
 
-In practise, therefore, we have to turn to \laurie{conservative stack scanning}.
+In practise, therefore, VMs using direct references have to turn to
+Conservative Stack Scanning (CSS), where the call stack is examined for
+pointers to instances of \texttt{Obj}. In order for this to work, the GC must
+know at what address a thread's stack began, and what address the stack is
+currently at. Each (aligned) word on the stack is then checked to see whether
+it points to an instance of \texttt{Obj}: if it does, that \texttt{Obj} is
+considered a root. Depending on the GC, checking whether an arbitrary word is a
+pointer to an \texttt{Obj} can be fairly expensive \laurie{cite?}. CSS also inherently
+over-approximates the root set, because random words on the stack may
+accidentally point to an \texttt{Obj}, keeping it alive longer than necessary
+\laurie{can we cite a study which shows this doesn't happen very often? I think
+Steve Blackburn might have been involved in one?}. CSS also occupies something
+of a moral grey zone: it is not possible to write CSS in C without undefined
+behaviour; some compilers can frustrate CSS \laurie{cite the GCC word-splitting
+bug}, as can some operating systems. However, in practise, CSS is widely used
+(e.g.~the well-known Boehm-Demers-Weiser GC~\cite{boehm88garbage} and WebKit),
+showing that it is adequately reliable in practise.
 
 
 \subsection{Handles}
