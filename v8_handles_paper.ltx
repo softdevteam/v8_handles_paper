@@ -6,7 +6,8 @@
 \begin{abstract}
 The performance merits of using handles or direct references for garbage
 collection have long been debated, but there are few published
-comparisons. In this paper we provide concrete evidence by migrating a
+comparisons. In this paper we provide concrete evidence of the
+performance differences between these two approaches by migrating a
 substantial portion of V8, a modern JavaScript virtual machine, from
 handles to direct references. On standard V8 benchmark suites, the use
 of direct references improves performance by \laurie{X\%}.
@@ -21,8 +22,8 @@ of direct references improves performance by \laurie{X\%}.
 A major challenge with Garbage Collection (GC) is finding all the \emph{roots}
 (i.e.~the starting set of references into the object graph). Many languages,
 notably C/C++, and many compilers, provide no way to precisely enumerate the
-roots. This is a challenge for programming language Virtual Machines (VMs)
-written in C/C++ and which implement GCed languages (e.g.~LISP, Java,
+roots. This is a challenge for those programming language Virtual Machines (VMs)
+written in C/C++ which implement GCed languages (e.g.~LISP, Java,
 or JavaScript): when using \emph{direct references} to objects, roots
 can be `lost' on the C/C++ call stack.
 
@@ -32,7 +33,7 @@ stackmaps, and LLVM's support is incomplete and unsupported. In practise,
 nearly all VMs thus have to make a choice. If they want to use direct references,
 they must use \emph{conservative stack scanning}, which considers every word on
 the stack to be a potential pointer: if that `pointer' references a GCed
-object, then the `pointer' is considered a root. This over-approximates the
+object, then it is considered to be a root. This over-approximates the
 roots: words that are not pointers can accidentally keep alive objects.
 \emph{Handles} (first introduced in recognisable form
 by~\cite{brooks84trading}, though the term `handles' was only used later) add a
