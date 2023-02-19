@@ -66,8 +66,65 @@ considering direct references and handles.
 
 \section{Background}
 \label{sec:background}
-In this section, we give a brief overview of V8 and how its memory management
-works.
+
+In this section we provide a brief overview of direct references and handles in
+the context of VMs. To help make this somewhat concrete, we do so using a
+hypothetical object orientated programming language VM written in C, where
+every user-level object is an instance of a \texttt{struct} called
+\texttt{Obj}, which we will assume has a single field \texttt{data} of type
+\texttt{int}. The GC for our VM exposes a single function \texttt{Obj
+*gc\_new\_obj()} which returns a pointer to a block of memory with a freshly
+initialised \texttt{Obj}. We assume that the GC runs concurrently to the main
+VM thread and can free the memory of any unreachable \texttt{Obj} at any point.
+
+
+\subsection{Direct References}
+
+The most `natural' way to program our hypothetical VM is to use direct
+references. When we want to create a new object, we call \texttt{gc\_new\_obj},
+assign the result to a local variable, and then operate upon it's \texttt{data}
+field:
+
+\begin{lstlisting}[language=C]
+Obj *n = gc_new_obj();
+n.data = 1;
+\end{lstlisting}
+
+In other words, in the direct references style, we program in C much as we
+would any kind of non-VM program. However, the concurrent GC poses a problem
+for this example code, as it can run immediately after line 1 has executed, but
+before line 2 has executed. If the GC were to free the block of memory
+containing the \texttt{Obj} then something `bad' would happen when line 2 is
+executed (e.g.~the program might segfault or overwrite a portion of memory now
+used in another part of a program).
+
+To avoid this problem, the GC must know that the object referenced by the C
+local variable \texttt{n} is a root. Put another way, the fundamental challenge
+faced by the direct reference style is that references to objects can be `lost'
+on the call stack\footnote{For the purposes of our example, we only need consider
+explicit local variables: intermediate values created by the compiler during
+other calculations (e.g.~pointer arithmetic) face exactly the same challenges.}.
+
+The ideal, and universal, solution would be for C's language specification to
+allow \emph{introspection} of a function's frame layout e.g.~where local
+variables live within a function frame on the call stack. When the GC executes,
+it could then read the value of each variable of type \texttt{Obj*} on the call
+stack, and add that as a GC root. Local variables of other types, which are not
+of interest to the GC, would be ignored. In other words, in this scenario the
+GC can precisely enumerate the GC roots.
+
+Unfortunately, no mainstream systems language defines an introspection
+capability. Some compilers instead offer the concept of \emph{stackmaps}, where
+the compiler defines a way for a program to introspect a function's frame
+layout. Stackmaps offer the same functionality as language-defined
+introspection, but do so in a way that is not portable between compilers. For
+example, GCC does not offer stackmap support. LLVM does have stackmap support,
+but (as some of this paper's authors have discovered in other work), it
+is experimental, incomplete, and unsupported, with particular problems at
+higher optimisation levels.
+
+In practise, therefore, we have to turn to \laurie{conservative stack scanning}.
+
 
 \subsection{Handles}
 The beauty of this scheme is that collectively, handles implicitly encode the
@@ -82,6 +139,11 @@ require V8 developers to respect various rules that cannot be fully encoded in
 \cpp's type system. While linting tools are provided to ensure rules around
 handles are followed, violations can lead to unsoundness.
 
+
+\section{Handles in V8}
+
+In this section, we give a brief overview of V8 and how its memory management
+works.
 
 \subsection{V8 garbage collection basics}
 V8 is a high-performance JavaScript virtual machine (VM). It can be used as a
@@ -142,6 +204,7 @@ efficiently differentiated. Indirect handles that have an internal value of NULL
 represent a null pointer (and thus cannot be dereferenced to a handle block
 member). Handle block members with an interior value whose least significant bit
 is 0 encode a SMI; if the same bit is 1 a pointer is encoded.
+
 
 \section{Gradually Migrating from Handles to Direct References}
 \label{sec:migration}
