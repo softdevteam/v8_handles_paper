@@ -29,8 +29,9 @@ v8_handles_paper_preamble.fmt: v8_handles_paper_preamble.ltx softdev.sty
 softdevbib-update: softdevbib
 	cd softdevbib && git pull
 
-bib.bib: softdevbib/softdev.bib
-	softdevbib/bin/prebib softdevbib/softdev.bib > bib.bib
+bib.bib: softdevbib/softdev.bib local.bib
+	softdevbib/bin/prebib -x month softdevbib/softdev.bib > bib.bib
+	softdevbib/bin/prebib -x month local.bib >> bib.bib
 
 softdevbib/softdev.bib:
 	git submodule init
