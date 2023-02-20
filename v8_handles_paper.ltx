@@ -35,8 +35,7 @@ they must use \emph{conservative stack scanning}, which considers every word on
 the stack to be a potential pointer: if that `pointer' references a GCed
 object, then it is considered to be a root. This over-approximates the
 roots: words that are not pointers can accidentally keep alive objects.
-\emph{Handles} (first introduced in recognisable form
-by~\cite{brooks84trading}, though the term `handles' was only used later) add a
+\emph{Handles} add a
 layer of indirection to object references. A handle is stored at a fixed point
 in memory, allowing the \emph{pool} of handles to be easily enumerated as
 roots. The object a handle refers to can then move in memory. This provides
@@ -72,18 +71,18 @@ the context of VMs. To help make this somewhat concrete, we do so for a
 hypothetical VM, written in C, that implements an object orientated language.
 In this VM, every language-level object is an instance of a \texttt{struct} called
 \texttt{Obj}, which we will assume has a single field \texttt{data} of type
-\texttt{int}. The GC for our VM exposes a single function \texttt{Obj
-*gc\_new\_obj()} which returns a pointer to a block of memory with a freshly
-initialised \texttt{Obj}. We assume that the GC runs concurrently to the main
+\texttt{int}. We assume that the GC runs concurrently to the main
 VM thread and can free the memory of any unreachable \texttt{Obj} at any point.
 
 
 \subsection{Direct References}
 
 The most `natural' way to program our hypothetical VM is to use direct
-references. When we want to create a new object, we call \texttt{gc\_new\_obj},
-assign the result to a local variable, and then operate upon it's \texttt{data}
-field:
+references. Assuming that the GC exposes a single function \texttt{Obj
+*gc\_new\_obj()} which returns a pointer to a block of memory with a freshly
+initialised \texttt{Obj}, when we want to create a new object, we call
+\texttt{gc\_new\_obj}, assign the result to a local variable, and then operate
+upon it's \texttt{data} field:
 
 \begin{lstlisting}[language=C]
 Obj *n = gc_new_obj();
@@ -154,22 +153,63 @@ the underlying program.
 
 \subsection{Handles}
 
+An alternative approach to CSS has become known as handles (first introduced in
+recognisable form by~\cite{brooks84trading}, though the term `handles' was only
+used later). The basic idea is to add a level of indirection to object
+references, with the indirection being the `handle'. Handles are stored at a
+guaranteed-fixed point in memory, though the \texttt{Obj} a handle points to
+may move.
 
+When the VM wants to use a handle, it must register it as being used with the
+GC: this ensures the handle is treated as a root; and also temporarily pinning
+the underlying \texttt{Obj} to prevent it from being moved, ensuring that
+accessing the \texttt{Obj} is safe. When the VM is finished operating on the
+\texttt{Obj} it must register the handle as no longer being used, which removes
+the handle from the root set, and unpins the underlying \texttt{Obj}.
 
-The beauty of this scheme is that collectively, handles implicitly encode the
-GC’s root set of objects, and JavaScript objects can be moved easily while it
-they are still referenced, since only the value stored in a handle needs to be
-updated. However, this simplicity comes with a performance cost: each heap
-object dereference requires two (nested) pointer dereferences, with inevitable
-consequences for code size, cache behaviour, and static optimisations. There is
-also a performance cost to creating and destroying the blocks in the VM which
-contain these handles. Handles in V8 also have an ergonomic trade-off, they
-require V8 developers to respect various rules that cannot be fully encoded in
-\cpp's type system. While linting tools are provided to ensure rules around
-handles are followed, violations can lead to unsoundness.
+In our ongoing example, our GC gains a new struct \texttt{Handle} and three new
+functions: \texttt{Handle *gc\_new\_obj()} which returns a pointer to a handle,
+where the handle points to a freshly initialised \texttt{Obj}; \texttt{Obj
+*use\_handle(Handle *)} which informs the GC that the handle being pointed to
+is being used, and returns a pointer to the underlying \texttt{Obj}; and
+\texttt{void unuse\_handle(Handle *)} which informs the GC that the handle is
+no longer being used. For example:
+
+\begin{lstlisting}[language=C]
+Handle *h = gc_new_obj();
+Obj *o = use_handle(h);
+n.data = 1;
+unuse_handle(h);
+\end{lstlisting}
+
+Handles have significant advantages. First, the \texttt{use} / \texttt{unuse} of a
+handle implicitly adds / removes it to / from the GC's root set with perfect
+precision. Furthermore, it does so in a way that is fully portable, requires no
+explicit language or compiler support, and does not stray into the territory of
+possibly undefined behaviour. Second, if a \texttt{Handle} is not currently
+used, the underlying \texttt{Obj} can be safely moved. In other words, handles
+make it trivial to write moving GCs.
+
+There are however disadvantages. First, any handle API is easy to misuse:
+forgetting to \texttt{use} a handle or \texttt{unuse}ing a handle twice leads
+to undefined behaviour. Finding such API misuse is notoriously hard, and VMs
+such as V8 have developed home-grown linters that scan for obvious API misuse,
+though none that we know of can catch all possible kinds of API misuse. Second,
+the double indirection that handles imply causes at least some performance loss
+relative to the single indirection of direct references. Third, handles have
+additional run-time costs beyond those of double indirection: each handle
+consumes some memory; since handles cannot move, they can cause memory
+fragmentation; and using / unusing a handle requires at least some computation
+and, depending on the VM, possibly memory allocation.
 
 
 \section{Handles in V8}
+
+\laurie{in this section we want to go into detail into V8's handle mechanism,
+giving code examples etc. Hopefully it can build upon the simple abstract view
+of the Background section, but we shouldn't try and force the description of V8
+into that vein if it doesn't fit. I can easily change the Background section to
+reflect what will most help the reader understand V8.}
 
 In this section, we give a brief overview of V8 and how its memory management
 works.
