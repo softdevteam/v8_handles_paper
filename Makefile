@@ -25,13 +25,13 @@ v8_handles_paper_preamble.fmt: v8_handles_paper_preamble.ltx
 	  pdftex -ini -jobname="${@:.fmt=}" "&pdflatex" mylatexformat.ltx $${tmpltx}; \
 	  rm $${tmpltx}
 
-bib.bib: softdevbib/softdev.bib
-	softdevbib/bin/prebib softdevbib/softdev.bib > bib.bib
 
 softdevbib-update: softdevbib
 	cd softdevbib && git pull
 
-softdevbib/softdev.bib: softdevbib
+bib.bib: softdevbib/softdev.bib
+	softdevbib/bin/prebib softdevbib/softdev.bib > bib.bib
 
-softdevbib:
-	git clone https://github.com/softdevteam/softdevbib.git
+softdevbib/softdev.bib:
+	git submodule init
+	git submodule update
