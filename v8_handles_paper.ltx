@@ -135,15 +135,27 @@ pointer to an \texttt{Obj} can be fairly expensive \laurie{cite?}. CSS also inhe
 over-approximates the root set, because random words on the stack may
 accidentally point to an \texttt{Obj}, keeping it alive longer than necessary
 \laurie{can we cite a study which shows this doesn't happen very often? I think
-Steve Blackburn might have been involved in one?}. CSS also occupies something
-of a moral grey zone: it is not possible to write CSS in C without undefined
-behaviour; some compilers can frustrate CSS \laurie{cite the GCC word-splitting
-bug}, as can some operating systems. However, in practise, CSS is widely used
-(e.g.~the well-known Boehm-Demers-Weiser GC~\cite{boehm88garbage} and WebKit~\cite{pizlo17riptide}),
-showing that it is adequately reliable in practise.
+Steve Blackburn might have been involved in one?}.
+
+Although CSS is widely used in practise (e.g.~the well-known
+Boehm-Demers-Weiser GC~\cite{boehm88garbage} and WebKit~\cite{pizlo17riptide}),
+there are other issues to consider. First, it occupies something of a moral
+grey zone in terms of its safety: it is not possible to write CSS in C without
+undefined behaviour; and some compilers can frustrate CSS \laurie{cite the GCC
+word-splitting bug}, as can some operating systems. Second, it is impossible to
+write a fully \emph{moving GC} (i.e.~a GC which can change the position of an
+\texttt{Obj} in memory e.g.~to reduce memory fragmentation) with CSS, because a
+conservatively-identified reference to an \texttt{Obj} might not be an actual
+reference. In other words, if we were to change conservatively-identified
+references to point to new memory locations, we would sometimes change parts of
+memory which were never intended to be references to an \texttt{Obj}, breaking
+the underlying program.
 
 
 \subsection{Handles}
+
+
+
 The beauty of this scheme is that collectively, handles implicitly encode the
 GC’s root set of objects, and JavaScript objects can be moved easily while it
 they are still referenced, since only the value stored in a handle needs to be
