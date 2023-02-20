@@ -132,9 +132,10 @@ it references an instance of \texttt{Obj}: if it does, that \texttt{Obj} is
 considered a root. Depending on the GC, checking whether an arbitrary word is a
 pointer to an \texttt{Obj} can be fairly expensive \laurie{cite?}. CSS also inherently
 over-approximates the root set, because random words on the stack may
-accidentally point to an \texttt{Obj}, keeping it alive longer than necessary
-\laurie{can we cite a study which shows this doesn't happen very often? I think
-Steve Blackburn might have been involved in one?}.
+accidentally point to an \texttt{Obj}, keeping it alive longer than necessary.
+Fortunately, in practise few objects are kept alive unnecessarily long:
+the most extensive study we know of suggests the false detection rate
+in Java programs is under 0.01\% of live objects~\cite{shahriyar14fast}.
 
 Although CSS is widely used in practise (e.g.~the well-known
 Boehm-Demers-Weiser GC~\cite{boehm88garbage} and WebKit~\cite{pizlo17riptide}),
