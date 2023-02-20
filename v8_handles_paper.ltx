@@ -68,9 +68,9 @@ considering direct references and handles.
 \label{sec:background}
 
 In this section we provide a brief overview of direct references and handles in
-the context of VMs. To help make this somewhat concrete, we do so using a
-hypothetical object orientated programming language VM written in C, where
-every user-level object is an instance of a \texttt{struct} called
+the context of VMs. To help make this somewhat concrete, we do so for a
+hypothetical VM, written in C, that implements an object orientated language.
+In this VM, every language-level object is an instance of a \texttt{struct} called
 \texttt{Obj}, which we will assume has a single field \texttt{data} of type
 \texttt{int}. The GC for our VM exposes a single function \texttt{Obj
 *gc\_new\_obj()} which returns a pointer to a block of memory with a freshly
@@ -90,31 +90,32 @@ Obj *n = gc_new_obj();
 n.data = 1;
 \end{lstlisting}
 
-In other words, in the direct references style, we program in C much as we
-would any kind of non-VM program. However, the concurrent GC poses a problem
+As this example suggests, when using direct references, we program in C much as we
+would for any non-VM C program. However, the concurrent GC poses a potential problem
 for this example code, as it can run immediately after line 1 has executed, but
 before line 2 has executed. If the GC were to free the block of memory
 containing the \texttt{Obj} then something `bad' would happen when line 2 is
 executed (e.g.~the program might segfault or overwrite a portion of memory now
 used in another part of a program).
 
-To avoid this problem, the GC must know that the object referenced by the C
-local variable \texttt{n} is a root. Put another way, the fundamental challenge
-faced by the direct reference style is that references to objects can be `lost'
-on the call stack\footnote{For the purposes of our example, we only need consider
-explicit local variables: intermediate values created by the compiler during
-other calculations (e.g.~pointer arithmetic) face exactly the same challenges.}.
+The challenge for direct references is that local variables such as \texttt{n}
+are normally stored in a function frame on the C call stack\footnote{There are
+other hiding places for such references, ranging from thread-local to
+intermediate variables: for introductory purposes, they can be considered minor
+variations on the C call stack problem.}: somehow, the GC must be able to find
+the local variable \texttt{n} on the call stack and use the object it points to
+as a root.
 
 The ideal, and universal, solution would be for C's language specification to
-allow \emph{introspection} of a function's frame layout e.g.~where local
-variables live within a function frame on the call stack. When the GC executes,
-it could then read the value of each variable of type \texttt{Obj*} on the call
-stack, and add that as a GC root. Local variables of other types, which are not
+allow \emph{introspection} of a function's frame layout, telling it,
+for example, where each local variable lives within a frame. For each
+frame on the stack, the GC could then read the value of each variable of type \texttt{Obj*}
+and add that as a GC root. Local variables of other types, which are not
 of interest to the GC, would be ignored. In other words, in this scenario the
-GC can precisely enumerate the GC roots.
+GC can precisely enumerate the GC roots. Unfortunately, no mainstream systems language defines an introspection
+capability.
 
-Unfortunately, no mainstream systems language defines an introspection
-capability. Some compilers instead offer the concept of \emph{stackmaps}, where
+Some compilers instead offer the concept of \emph{stackmaps}, where
 the compiler defines a way for a program to introspect a function's frame
 layout. Stackmaps offer the same functionality as language-defined
 introspection, but do so in a way that is not portable between compilers. For
@@ -124,11 +125,11 @@ is experimental, incomplete, and unsupported, with particular problems at
 higher optimisation levels.
 
 In practise, therefore, VMs using direct references have to turn to
-Conservative Stack Scanning (CSS), where the call stack is examined for
+Conservative Stack Scanning (CSS), where the call stack is exhaustively examined for
 pointers to instances of \texttt{Obj}. In order for this to work, the GC must
 know at what address a thread's stack began, and what address the stack is
 currently at. Each (aligned) word on the stack is then checked to see whether
-it points to an instance of \texttt{Obj}: if it does, that \texttt{Obj} is
+it references an instance of \texttt{Obj}: if it does, that \texttt{Obj} is
 considered a root. Depending on the GC, checking whether an arbitrary word is a
 pointer to an \texttt{Obj} can be fairly expensive \laurie{cite?}. CSS also inherently
 over-approximates the root set, because random words on the stack may
@@ -138,7 +139,7 @@ Steve Blackburn might have been involved in one?}. CSS also occupies something
 of a moral grey zone: it is not possible to write CSS in C without undefined
 behaviour; some compilers can frustrate CSS \laurie{cite the GCC word-splitting
 bug}, as can some operating systems. However, in practise, CSS is widely used
-(e.g.~the well-known Boehm-Demers-Weiser GC~\cite{boehm88garbage} and WebKit),
+(e.g.~the well-known Boehm-Demers-Weiser GC~\cite{boehm88garbage} and WebKit~\cite{pizlo17riptide}),
 showing that it is adequately reliable in practise.
 
 
