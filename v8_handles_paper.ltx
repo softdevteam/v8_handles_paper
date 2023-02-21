@@ -28,9 +28,11 @@ that is the starting set of references into the object graph. Ideally, GCs
 would be able to precisely enumerate the root set. However, current languages
 and compilers make this difficult, or impossible, as \emph{direct references}
 to objects can be `lost' on the call stack: to compensate, we are forced
-to conservatively scan the call stack, over-approximating the
-root set. Alternatively, we can use \emph{handles}, that is wrappers around object references,
-such that we can use the handles as the (precise) root set.
+to conservatively scan the call stack. This means over-approximating the root
+set by looking at each word on the stack, and checking whether it could be a
+potential pointer to an object. Alternatively, we can use \emph{handles}, that
+is wrappers around object references, such that we can use the handles as the
+(precise) root set.
 
 In this paper, we consider this long-standing implementation and design trade-off
 in the context of programming language Virtual Machines (VMs). Some VMs
@@ -48,7 +50,7 @@ In this paper we examine the widely used JavaScript VM \emph{V8}, which has
 been designed from its inception to use handles. Our hypothesis is
 that moving from handles to direct references (and thus also conservative scanning) will improve V8's performance.
 However, moving wholesale from handles to direct references is impractical on a
-codebase of V8's size \laurie{how many LoC is V8?}, so our first challenge was
+codebase of V8's size (~1.75m lines of code) \jake{does this include torque files?}, so our first challenge was
 to find a practical means for gradually migrating parts of V8 from handles to
 direct references (Section~\ref{sec:migration}). Having then migrated a
 substantial portion of V8 from handles to direct references \laurie{can we give
@@ -115,14 +117,17 @@ Unfortunately, no mainstream systems language defines an introspection
 capability.
 
 Some compilers instead offer the concept of \emph{stackmaps}, where
-the compiler defines a way for a program to introspect a function's frame
-layout. Stackmaps offer the same functionality as language-defined
+the compiler defines a way for a program to introspect the call stack at
+specific points in time, known as \emph{safepoints}.
+Stackmaps offer the same functionality as language-defined
 introspection, but do so in a way that is not portable between compilers.
 Unfortunately, stackmaps are not yet widely available. GCC does not
 have any support for stackmaps. LLVM does have some stackmap support,
 but (as some of this paper's authors have discovered in other work), it
 is experimental, incomplete, and unsupported, with particular problems at
-higher optimisation levels.
+higher optimisation levels. \jake{There is also the statepoint author's article
+on how the old conservative gc.root mechanism should be favoured for GC stuff in
+LLVM. Not sure if that's worth citing?}
 
 In practise, therefore, VMs using direct references have to turn to
 \emph{conservative scanning}, where the C call stack is exhaustively examined for
@@ -151,7 +156,10 @@ such references can be safely rewritten or not.
 
 Conservative scanning also occupies an odd position in software: technically speaking, the
 way it works violates the rules of most languages, most compilers, and most
-operating systems. However, because conservative scanning is widely used (e.g.~the well-known
+operating systems.
+In addition, programming techniques which rely on obfuscating pointers (e.g.~using XOR lists) must be avoided, as they can hide roots from
+the GC.
+However, because conservative scanning is widely used (e.g.~the well-known
 Boehm-Demers-Weiser GC~\cite{boehm88garbage} and WebKit~\cite{pizlo17riptide})
 any software that breaks it tends to be rapidly fixed \laurie{cite the word-splitting bug}.
 
