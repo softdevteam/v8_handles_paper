@@ -62,7 +62,7 @@ considering direct references and handles.
 \label{sec:background}
 
 In this section we provide a brief overview of direct references and handles in
-the context of VMs. To help make this somewhat concrete, we do so for a
+the context of VMs. To help make this concrete, we do so for a
 hypothetical VM, written in C, that implements an object orientated language.
 In this VM, every language-level object is an instance of a \texttt{struct} called
 \texttt{Obj}, which we will assume has a single field \texttt{data} of type
@@ -77,28 +77,26 @@ references. Assuming that the GC exposes a single function \texttt{Obj
 *gc\_new\_obj()} which returns a pointer to a block of memory with a freshly
 initialised \texttt{Obj}, when we want to create a new object, we call
 \texttt{gc\_new\_obj}, assign the result to a local variable, and then operate
-upon it's \texttt{data} field:
+upon its \texttt{data} field:
 
 \begin{lstlisting}[language=C]
 Obj *n = gc_new_obj();
 n.data = 1;
 \end{lstlisting}
 
-As this example suggests, when using direct references, we program in C much as we
-would for any non-VM C program. However, the concurrent GC poses a potential problem
-for this example code, as it can run immediately after line 1 has executed, but
-before line 2 has executed. If the GC were to free the block of memory
-containing the \texttt{Obj} then something `bad' would happen when line 2 is
-executed (e.g.~the program might segfault or overwrite a portion of memory now
-used in another part of a program).
-
-The challenge for direct references is that local variables such as \texttt{n}
-are normally stored in a function frame on the C call stack\footnote{There are
-other hiding places for such references, ranging from thread-local to
-intermediate variables: for introductory purposes, they can be considered minor
-variations on the C call stack problem.}: somehow, the GC must be able to find
-the local variable \texttt{n} on the call stack and use the object it points to
-as a root.
+As this example suggests, `direct references' is our term for
+what many would see as the `normal' way of programming in C. Unlike most
+normal C programming, however, our VM must consider the concurrent GC:
+it can run immediately after line 1 has executed, but
+before line 2 has executed. If the GC were not to notice that \texttt{n}
+is pointing to live \texttt{Obj}, it would free the underlying memory,
+causing the program to misbehave (e.g.~the program might segfault or overwrite
+a portion of memory now used in another thread). Put another way, the
+GC must be able to find roots, even those stored in C-level variables,
+which may only exist on the C call stack\footnote{There are
+other hiding places for such references, ranging from thread-locals to
+registers to intermediate variables: for introductory purposes, these can be considered minor
+variations on the C call stack problem.}).
 
 The ideal, and universal, solution would be for C's language specification to
 allow \emph{introspection} of a function's frame layout, telling it,
@@ -119,27 +117,30 @@ is experimental, incomplete, and unsupported, with particular problems at
 higher optimisation levels.
 
 In practise, therefore, VMs using direct references have to turn to
-Conservative Stack Scanning (CSS), where the call stack is exhaustively examined for
+\emph{conservative scanning}, where the C call stack is exhaustively examined for
 pointers to instances of \texttt{Obj}. In order for this to work, the GC must
 know at what address a thread's stack began, and what address the stack is
 currently at. Each (aligned) word on the stack is then checked to see whether
 it references an instance of \texttt{Obj}: if it does, that \texttt{Obj} is
 considered a root. Depending on the GC, checking whether an arbitrary word is a
-pointer to an \texttt{Obj} can be fairly expensive \laurie{cite?}. CSS also inherently
+pointer to an \texttt{Obj} can be fairly expensive \laurie{cite?}. Conservative
+scanning also inherently
 over-approximates the root set, because random words on the stack may
 accidentally point to an \texttt{Obj}, keeping it alive longer than necessary.
-Fortunately, in practise few objects are kept alive unnecessarily long:
+Fortunately, in practise relatively few objects are kept alive unnecessarily long:
 the most extensive study we know of suggests the false detection rate
 in Java programs is under 0.01\% of live objects~\cite{shahriyar14fast}.
 
-Although CSS is widely used in practise (e.g.~the well-known
+Although conservative scanning is widely used in practise (e.g.~the well-known
 Boehm-Demers-Weiser GC~\cite{boehm88garbage} and WebKit~\cite{pizlo17riptide}),
 there are other issues to consider. First, it occupies something of a moral
-grey zone in terms of its safety: it is not possible to write CSS in C without
-undefined behaviour; and some compilers can frustrate CSS \laurie{cite the GCC
-word-splitting bug}, as can some operating systems. Second, it is impossible to
+grey zone in terms of its safety: it is not possible to write a conservative
+C stack scanner in C without causing undefined behaviour; and some compilers can frustrate
+conservative scanning (e.g.~by splitting pointers across multiple words\laurie{cite the GCC
+word-splitting bug}), as can some operating systems. Second, conservative
+scanning makes it impossible to
 write a fully \emph{moving GC} (i.e.~a GC which can change the position of an
-\texttt{Obj} in memory e.g.~to reduce memory fragmentation) with CSS, because a
+\texttt{Obj} in memory e.g.~to reduce memory fragmentation), because a
 conservatively-identified reference to an \texttt{Obj} might not be an actual
 reference. In other words, if we were to change conservatively-identified
 references to point to new memory locations, we would sometimes change parts of
@@ -149,18 +150,19 @@ the underlying program.
 
 \subsection{Handles}
 
-An alternative approach to CSS has become known as handles (first introduced in
+An alternative approach to direct references and conservative scanning
+has become known as handles (first introduced in
 recognisable form by~\cite{brooks84trading}, though the term `handles' was only
 used later). The basic idea is to add a level of indirection to object
 references, with the indirection being the `handle'. Handles are stored at a
 guaranteed-fixed point in memory, though the \texttt{Obj} a handle points to
 may move.
 
-When the VM wants to use a handle, it must register it as being used with the
-GC: this ensures the handle is treated as a root; and also temporarily pinning
+When a function within the VM wants to use a handle, it must register it as being used with the
+GC: this ensures the handle is treated as a root; and also temporarily pins
 the underlying \texttt{Obj} to prevent it from being moved, ensuring that
-accessing the \texttt{Obj} is safe. When the VM is finished operating on the
-\texttt{Obj} it must register the handle as no longer being used, which removes
+accessing the \texttt{Obj} is safe. When the function has finished with a
+\texttt{Obj}, it must register the handle as no longer being used; this removes
 the handle from the root set, and unpins the underlying \texttt{Obj}.
 
 In our ongoing example, our GC gains a new struct \texttt{Handle} and three new
@@ -178,23 +180,23 @@ n.data = 1;
 unuse_handle(h);
 \end{lstlisting}
 
-Handles have significant advantages. First, the \texttt{use} / \texttt{unuse} of a
-handle implicitly adds / removes it to / from the GC's root set with perfect
-precision. Furthermore, it does so in a way that is fully portable, requires no
-explicit language or compiler support, and does not stray into the territory of
-possibly undefined behaviour. Second, if a \texttt{Handle} is not currently
+Handles have significant advantages. First, \texttt{use} / \texttt{unuse}
+implicitly add / removes handles to / from the GC's root set with perfect
+precision. Second, handles are fully portable, require no
+explicit language or compiler support, and do not stray into the badlands of
+undefined behaviour. Third, if a \texttt{Handle} is not currently being
 used, the underlying \texttt{Obj} can be safely moved. In other words, handles
-make it trivial to write moving GCs.
+make it trivial to write precise, fully moving GCs.
 
 There are however disadvantages. First, any handle API is easy to misuse:
 forgetting to \texttt{use} a handle or \texttt{unuse}ing a handle twice leads
 to undefined behaviour. Finding such API misuse is notoriously hard, and VMs
 such as V8 have developed home-grown linters that scan for obvious API misuse,
 though none that we know of can catch all possible kinds of API misuse. Second,
-the double indirection that handles imply causes at least some performance loss
+handles' double level of indirection implies at least some performance loss
 relative to the single indirection of direct references. Third, handles have
 additional run-time costs beyond those of double indirection: each handle
-consumes some memory; since handles cannot move, they can cause memory
+consumes memory; since handles cannot move, they can cause memory
 fragmentation; and using / unusing a handle requires at least some computation
 and, depending on the VM, possibly memory allocation.
 
