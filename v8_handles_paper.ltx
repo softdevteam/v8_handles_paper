@@ -23,38 +23,29 @@ On the Speedometer browser benchmark~\cite{}, the use of direct references impro
 
 \section{Introduction}
 
-A major challenge with Garbage Collection (GC) is finding all the \emph{roots}
-(i.e.~the starting set of references into the object graph). Many languages,
-notably C/C++, and many compilers, provide no way to precisely enumerate the
-roots. This is a challenge for those programming language Virtual Machines (VMs)
-written in C/C++ which implement GCed languages (e.g.~LISP, Java,
-or JavaScript): when using \emph{direct references} to objects, roots
-can be `lost' on the C/C++ call stack.
+A major challenge with Garbage Collection (GC) is finding all the \emph{roots},
+that is the starting set of references into the object graph. Ideally we would
+be able to precisely enumerate the root set. However, current languages
+and compilers make this difficult or impossible as references can be `lost' on
+the call stack. In practise, we either have to: use \emph{direct references}
+and conservatively search for references to objects, over-approximating the
+root set; or use \emph{handles}, that is wrappers around object references,
+such that we can use the handles as the root set.
 
-Compiler support for \emph{stackmaps} allows precise scanning of the C/C++ call
-stack to uncover all direct references: unfortunately, GCC has no support for
-stackmaps, and LLVM's support is incomplete and unsupported. In practise,
-nearly all VMs thus have to make a choice. If they want to use direct references,
-they must use \emph{conservative stack scanning}, which considers every word on
-the stack to be a potential pointer: if that `pointer' references a GCed
-object, then it is considered to be a root. This over-approximates the
-roots: words that are not pointers can accidentally keep alive objects.
-\emph{Handles} add a
-layer of indirection to object references. A handle is stored at a fixed point
-in memory, allowing the \emph{pool} of handles to be easily enumerated as
-roots. The object a handle refers to can then move in memory. This provides
-accurate enumeration of the roots, but can be awkward to program with.
-
-The relative merits of direct references and handles have been a talking point
-in GC research for decades. In particular, many have strong opinions on the
-performance of each approach: conservative stack scanning wastes time examining
-words that can never be pointers; and handles require two dereferences to reach
-an object. However, there is a dearth of performance comparisons since
-VMs typically choose at the outset to use one approach or the other.
+In this paper, we consider this long-standing implementation and design choice
+in the context of programming language Virtual Machines (VMs). Some VMs
+(e.g.~HotSpot, SpiderMonkey, V8) use handles; some (e.g.~JavaScriptCore and
+those VMs using the Boehm-Demers-Weiser GC) use direct references, and partial
+or complete conservative scanning. There is little debate about the relative
+ergonomics: handles are more difficult to use. We also now have good evidence
+that conservative scanning of direct references tends to only slightly
+over-approximate the root set~\cite{shahriyar14fast}. However, there is no
+clear evidence for the run-time costs of handles relative to direct references
+and conservative scanning.
 
 In this paper we examine the widely used JavaScript VM \emph{V8}, which has
 been designed from its inception to use handles. Our fundamental hypothesis is
-that moving from handles to direct references will improve V8's performance.
+that moving from handles to direct references and conservative scanning will improve V8's performance.
 However, moving wholesale from handles to direct references is impractical on a
 codebase of V8's size \laurie{how many LoC is V8?}, so our first challenge was
 to find a practical means for gradually migrating parts of V8 from handles to
