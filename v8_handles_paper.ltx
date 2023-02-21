@@ -306,6 +306,10 @@ is 0 encode a SMI; if the same bit is 1 a pointer is encoded.
 \section{Evaluation}
 \label{sec:evaluation}
 
+89\% of garbage collections in Chrome are happening without a stack when we are on the message loop.
+Therefore making stack scanning conservative may not be an issue in practise.
+Add Speedometer numbers how often we finalize with a stack there.
+Maybe add browsing benchmark numbers to confirm impact\hannes{discuss with the team}.
 
 \section{Related Work}
 \label{sec:related}
