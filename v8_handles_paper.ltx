@@ -215,6 +215,24 @@ reflect what will most help the reader understand V8.}
 In this section, we give a brief overview of V8 and how its memory management
 works.
 
+% dump
+\begin{itemize}
+  \item There's many different kind of handles in V8. They have two purposes: (a) allow the GC to find those object references and (b) allow the GC to relocate objects.
+  \item In V8, handles are an explicit C++ mechanism/construct to maintain this information for the GC
+  \item There's root handles (should probably have a different name) that that maintain this information per handle (costly, but flexible as each handle can be created/destroyed individually) -- the paper doesn't care about those
+  \item There's handles (the interesting ones) that are bound to handle blocks which are maintained in a chain
+  \item The chain itself is dynamic (the list of blocks depends on branches taken at runtime)
+  \item The chain is mostly maintained via leveraging C++ lexical scopes and using RAII to add and remove blocks. Used this way, the handle scopes create precise stack maps.
+  \item Handles automatically register themselves in the current active scope by allocating one entry in such a block
+  \item A handle always refers to an object via the handle block.
+  \item The top of the dynamic chain is known to the GC. The top is identified by a single V8 isolate.
+  \item This way the GC can (a) find such handles and (b) relocate them
+  \item This is much cheaper than the individual root handle version but comes with the restriction to (a) require setting up handle scopes in some stack-like fashion and (b) not using handles that have had their scopoe closed and block removed
+  \item Using a handle that has been invalidated (scopes has been closed and thus block removed) is undefined behavior and results in (likely) crashes in debug builds
+\end{itemize}
+
+Minimal examples: https://gist.github.com/mlippautz/7c81854eeee27a8747cce88b922081d2
+
 \subsection{V8 garbage collection basics}
 V8 is a high-performance JavaScript virtual machine (VM). It can be used as a
 standalone application or embedded into larger applications such as Chrome or
