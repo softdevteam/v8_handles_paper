@@ -67,16 +67,17 @@ the context of VMs. To help make this concrete, we do so for a
 hypothetical VM, written in C, that implements an object orientated language.
 In this VM, every language-level object is an instance of a \texttt{struct} called
 \texttt{Obj}, which we will assume has a single field \texttt{data} of type
-\texttt{int}. We assume that the GC runs concurrently to the main
-VM thread and can free the memory of any unreachable \texttt{Obj} at any point.
+\texttt{int}. We assume that the VM contains a GC that runs in a thread
+concurrently with other VM threads: thus the GC can free the memory of any
+unreachable \texttt{Obj} at any point.
 
 
 \subsection{Direct References}
 
 The most `natural' way to program our hypothetical VM is to use direct
-references. Assuming that the GC exposes a single function \texttt{Obj
-*gc\_new\_obj()} which returns a pointer to a block of memory with a freshly
-initialised \texttt{Obj}, when we want to create a new object, we call
+references. We assume that the GC exposes a single function \texttt{Obj
+*gc\_new\_obj()}, which returns a pointer to a block of memory with a freshly
+initialised \texttt{Obj}. When we want to create a new object, we call
 \texttt{gc\_new\_obj}, assign the result to a local variable, and then operate
 upon its \texttt{data} field:
 
@@ -90,29 +91,35 @@ what many would see as the `normal' way of programming in C. Unlike most
 normal C programming, however, our VM must consider the concurrent GC:
 it can run immediately after line 1 has executed, but
 before line 2 has executed. If the GC were not to notice that \texttt{n}
-is pointing to live \texttt{Obj}, it would free the underlying memory,
+is pointing to a live \texttt{Obj}, it would free that \texttt{Obj}'s memory,
 causing the program to misbehave (e.g.~the program might segfault or overwrite
-a portion of memory now used in another thread). Put another way, the
-GC must be able to find roots, even those stored in C-level variables,
-which may only exist on the C call stack\footnote{There are
+a portion of memory now used in another thread). In other words,
+at that point in the program, \texttt{n} is part of the root set. The
+GC must be able to find roots stored in C-level variables, bearing
+in mind that at run-time such variables may be stored as part of a
+function frame on the C call stack\footnote{There are
 other hiding places for such references, ranging from thread-locals to
 registers to intermediate variables: for introductory purposes, these can be considered minor
-variations on the C call stack problem.}).
+variations on the C call stack problem.}.
 
 The ideal, and universal, solution would be for C's language specification to
 allow \emph{introspection} of a function's frame layout, telling it,
 for example, where each local variable lives within a frame. For each
-frame on the stack, the GC could then read the value of each variable of type \texttt{Obj*}
-and add that as a GC root. Local variables of other types, which are not
-of interest to the GC, would be ignored. In other words, in this scenario the
-GC can precisely enumerate the GC roots. Unfortunately, no mainstream systems language defines an introspection
+frame on the stack, the GC could then read the value of only those variables whose
+compile-time type is \texttt{Obj*}, considering the objects they reference as roots.
+Local variables of other types, which are not
+of interest to the GC, would be ignored. This would allow the GC to \emph{precisely}
+enumerate the GC roots (i.e.~to include all live objects as root while not
+including any non-live objects as roots).
+Unfortunately, no mainstream systems language defines an introspection
 capability.
 
 Some compilers instead offer the concept of \emph{stackmaps}, where
 the compiler defines a way for a program to introspect a function's frame
 layout. Stackmaps offer the same functionality as language-defined
-introspection, but do so in a way that is not portable between compilers. For
-example, GCC does not offer stackmap support. LLVM does have stackmap support,
+introspection, but do so in a way that is not portable between compilers.
+Unfortunately, stackmaps are not yet widely available. GCC does not
+have any support for stackmaps. LLVM does have some stackmap support,
 but (as some of this paper's authors have discovered in other work), it
 is experimental, incomplete, and unsupported, with particular problems at
 higher optimisation levels.
@@ -121,7 +128,7 @@ In practise, therefore, VMs using direct references have to turn to
 \emph{conservative scanning}, where the C call stack is exhaustively examined for
 pointers to instances of \texttt{Obj}. In order for this to work, the GC must
 know at what address a thread's stack began, and what address the stack is
-currently at. Each (aligned) word on the stack is then checked to see whether
+currently at. Each aligned word on the stack is then checked to see whether
 it references an instance of \texttt{Obj}: if it does, that \texttt{Obj} is
 considered a root. Depending on the GC, checking whether an arbitrary word is a
 pointer to an \texttt{Obj} can be fairly expensive \laurie{cite?}. Conservative
@@ -132,65 +139,71 @@ Fortunately, in practise relatively few objects are kept alive unnecessarily lon
 the most extensive study we know of suggests the false detection rate
 in Java programs is under 0.01\% of live objects~\cite{shahriyar14fast}.
 
-Although conservative scanning is widely used in practise (e.g.~the well-known
-Boehm-Demers-Weiser GC~\cite{boehm88garbage} and WebKit~\cite{pizlo17riptide}),
-there are other issues to consider. First, it occupies something of a moral
-grey zone in terms of its safety: it is not possible to write a conservative
-C stack scanner in C without causing undefined behaviour; and some compilers can frustrate
-conservative scanning (e.g.~by splitting pointers across multiple words\laurie{cite the GCC
-word-splitting bug}), as can some operating systems. Second, conservative
-scanning makes it impossible to
-write a fully \emph{moving GC} (i.e.~a GC which can change the position of an
-\texttt{Obj} in memory e.g.~to reduce memory fragmentation), because a
-conservatively-identified reference to an \texttt{Obj} might not be an actual
-reference. In other words, if we were to change conservatively-identified
-references to point to new memory locations, we would sometimes change parts of
-memory which were never intended to be references to an \texttt{Obj}, breaking
-the underlying program.
+Objects identified as live via conservative scanning must also be pinned in
+memory. Fully conservative GCs, that is GCs who conservatively scan all parts
+of memory, from the call stack to the heap, (e.g.~the Boehm-Demers-Weiser
+GC~\cite{boehm88garbage}) are fundamentally unable to move any objects in
+memory. Most conservative GCs are semi-conservative, that is most references to
+objects are determined precisely, with only some roots discovered
+conservatively. Semi-conservative GCs must temporarily pin those objects
+identified as live by conservative scanning, because they cannot know whether
+such references can be safely rewritten or not.
+
+Conservative scanning also occupies an odd position in software: technically speaking, the
+way it works violates the rules of most languages, most compilers, and most
+operating systems. However, because conservative scanning is widely used (e.g.~the well-known
+Boehm-Demers-Weiser GC~\cite{boehm88garbage} and WebKit~\cite{pizlo17riptide})
+any software that breaks it tends to be rapidly fixed \laurie{cite the word-splitting bug}.
 
 
 \subsection{Handles}
 
 An alternative approach to direct references and conservative scanning
-has become known as handles (first introduced in
+has become known as handles. These were first first introduced in
 recognisable form by~\cite{brooks84trading}, though the term `handles' was only
-used later). The basic idea is to add a level of indirection to object
-references, with the indirection being the `handle'. Handles are stored at a
-guaranteed-fixed point in memory, though the \texttt{Obj} a handle points to
-may move.
+used later. Modern VMs use handles in two distinct ways: in this section
+we will consider \emph{comprehensive handles}, as found in~\cite{kalibera11handles}
+(in Section~\ref{handles_in_v8} we will consider the other kind of handles).
 
-When a function within the VM wants to use a handle, it must register it as being used with the
-GC: this ensures the handle is treated as a root; and also temporarily pins
-the underlying \texttt{Obj} to prevent it from being moved, ensuring that
-accessing the \texttt{Obj} is safe. When the function has finished with a
-\texttt{Obj}, it must register the handle as no longer being used; this removes
-the handle from the root set, and unpins the underlying \texttt{Obj}.
+Comprehensive handles add a level of indirection to all object references, with
+the indirection being the `handle'. Handles are stored at a fixed point in
+memory, with one handle per object. In the context of our hypothetical
+VM, this means that we never store references to \texttt{Obj} directly, instead
+storing references to a \texttt{Handle} struct. When the VM wants to access an
+\texttt{Obj} it must \emph{tag} the corresponding \texttt{Handle}; this informs
+the GC that the \texttt{Handle} is a root. When the VM is finished with the
+\texttt{Obj} it must untag the corresponding \texttt{Handle}. We maintain a tag
+count for each \texttt{Handle}, as it may be tagged multiple times before being
+untagged: when the tag count goes to zero, the \texttt{Handle} is no longer a
+root.
 
-In our ongoing example, our GC gains a new struct \texttt{Handle} and three new
-functions: \texttt{Handle *gc\_new\_obj()} which returns a pointer to a handle,
-where the handle points to a freshly initialised \texttt{Obj}; \texttt{Obj
-*use\_handle(Handle *)} which informs the GC that the handle being pointed to
-is being used, and returns a pointer to the underlying \texttt{Obj}; and
-\texttt{void unuse\_handle(Handle *)} which informs the GC that the handle is
-no longer being used. For example:
+Our hypothetical GC needs three altered/new functions: \texttt{Handle
+*gc\_new\_obj()} returns a pointer to a handle, where the handle points to a
+freshly initialised \texttt{Obj}; \texttt{Obj *tag(Handle *)} which increments
+a handle's tag count by one and returns a pointer to the underlying
+\texttt{Obj}; and \texttt{void untag(Handle *)} which decrement the handle's
+tag count by one. For example:
 
 \begin{lstlisting}[language=C]
 Handle *h = gc_new_obj();
-Obj *o = use_handle(h);
+Obj *o = tag(h);
 n.data = 1;
-unuse_handle(h);
+untag(h);
 \end{lstlisting}
 
-Handles have significant advantages. First, \texttt{use} / \texttt{unuse}
-implicitly add / removes handles to / from the GC's root set with perfect
-precision. Second, handles are fully portable, require no
-explicit language or compiler support, and do not stray into the badlands of
-undefined behaviour. Third, if a \texttt{Handle} is not currently being
-used, the underlying \texttt{Obj} can be safely moved. In other words, handles
-make it trivial to write precise, fully moving GCs.
+Handles have significant advantages. First, tagging and untagging allows
+the GC to precisely determine the root set by iterating over all handles
+and considering as a root any handle with a tag count greater than 0.
+Second, handles are fully portable, do not trifle with undefined behaviour,
+and require no explicit language or compiler support.
+Third, any \texttt{Handle} with a zero tag count can have its
+underlying \texttt{Obj} safely moved. In other words, handles
+make it trivial to write precise, fully moving GCs. Comprehensive handles also
+have the virtue that moving an \texttt{Obj} requires only updating its
+corresponding \texttt{Handle}.
 
 There are however disadvantages. First, any handle API is easy to misuse:
-forgetting to \texttt{use} a handle or \texttt{unuse}ing a handle twice leads
+forgetting to \texttt{tag} a handle or \texttt{untag}ing a handle twice leads
 to undefined behaviour. Finding such API misuse is notoriously hard, and VMs
 such as V8 have developed home-grown linters that scan for obvious API misuse,
 though none that we know of can catch all possible kinds of API misuse. Second,
@@ -198,11 +211,11 @@ handles' double level of indirection implies at least some performance loss
 relative to the single indirection of direct references. Third, handles have
 additional run-time costs beyond those of double indirection: each handle
 consumes memory; since handles cannot move, they can cause memory
-fragmentation; and using / unusing a handle requires at least some computation
-and, depending on the VM, possibly memory allocation.
+fragmentation; and tagging / untagging a handle requires memory reads and writes.
 
 
 \section{Handles in V8}
+\label{handles_in_v8}
 
 \laurie{in this section we want to go into detail into V8's handle mechanism,
 giving code examples etc. Hopefully it can build upon the simple abstract view
