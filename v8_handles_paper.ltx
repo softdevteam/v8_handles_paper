@@ -326,6 +326,16 @@ Therefore making stack scanning conservative may not be an issue in practise.
 Add Speedometer numbers how often we finalize with a stack there.
 Maybe add browsing benchmark numbers to confirm impact\hannes{discuss with the team}.
 
+\begin{figure*}[t]
+    \begin{tabular}{lll}
+\toprule
+        Benchmark & Handles (ms) & Direct Pointers (ms) \\
+\midrule
+\input{table_no_gc.tex}
+\end{tabular}
+\caption{The mean results froms 10 iterations of the Speedometer2.1 benchmark suite
+    on both configurations of Chrome}
+\end{figure*}
 \section{Related Work}
 \label{sec:related}
 
