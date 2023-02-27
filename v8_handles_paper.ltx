@@ -26,18 +26,24 @@ On the Speedometer browser benchmark~\cite{}, the use of direct references impro
 A major challenge for Garbage Collection (GC) is finding all the \emph{roots},
 that is the starting set of references into the object graph. Ideally, GCs
 would be able to precisely enumerate the root set. However, current languages
-and compilers make this difficult, or impossible, as \emph{direct references}
+and compilers make this difficult, or impossible, as pointers
 to objects can be `lost' on the call stack: to compensate, we are forced
 to conservatively scan the call stack. This means over-approximating the root
-set by looking at each word on the stack, and checking whether it could be a
-potential pointer to an object. Alternatively, we can use \emph{handles}, that
+set by looking at each word on the stack, and checking whether it looks like
+a pointer to an object. To avoid conservative scanning, we can use \emph{handles}, that
 is wrappers around object references, such that we can use the handles as the
 (precise) root set.
 
+\laurie{V8 uses what i'm tentatively calling `partial handles`: that is, it
+crates handles lazily, destroys them when it doesn't need them, and tries to
+use direct references whenever it can. in contrast `comprehensive handles'
+would never use direct references. do spidermonkey and v8 use partial or
+comprehensive handles?}
 In this paper, we consider this long-standing implementation and design trade-off
 in the context of programming language Virtual Machines (VMs). Some VMs
 (e.g.~HotSpot, SpiderMonkey, V8) use handles; some (e.g.~JavaScriptCore and
-those VMs using the Boehm-Demers-Weiser GC) use direct references, and partial
+those VMs using the Boehm-Demers-Weiser GC) use \emph{direct references}
+(i.e.~`normal pointers'), and partial
 or complete conservative scanning. There is little debate about the relative
 ergonomics: handles are more difficult to use. We also now have good evidence
 that conservative scanning of direct references tends to only slightly
@@ -96,8 +102,10 @@ before line 2 has executed. If the GC were not to notice that \texttt{n}
 is pointing to a live \texttt{Obj}, it would free that \texttt{Obj}'s memory,
 causing the program to misbehave (e.g.~the program might segfault or overwrite
 a portion of memory now used in another thread). In other words,
-at that point in the program, \texttt{n} is part of the root set. The
-GC must be able to find roots stored in C-level variables, bearing
+at that point in the program, \texttt{n} is a \emph{root}, that
+is an entry point into the graph of objects created by the VM. For
+our purposes, we can consider the root set to be all references to
+objects stored in C-level variables, bearing
 in mind that at run-time such variables may be stored as part of a
 function frame on the C call stack\footnote{There are
 other hiding places for such references, ranging from thread-locals to
@@ -118,8 +126,7 @@ capability.
 
 Some compilers instead offer the concept of \emph{stackmaps}, where
 the compiler defines a way for a program to introspect the call stack at
-specific points in time, known as \emph{safepoints}.
-Stackmaps offer the same functionality as language-defined
+specific locations. Stackmaps offer the same functionality as language-defined
 introspection, but do so in a way that is not portable between compilers.
 Unfortunately, stackmaps are not yet widely available. GCC does not
 have any support for stackmaps. LLVM does have some stackmap support,
@@ -127,7 +134,8 @@ but (as some of this paper's authors have discovered in other work), it
 is experimental, incomplete, and unsupported, with particular problems at
 higher optimisation levels. \jake{There is also the statepoint author's article
 on how the old conservative gc.root mechanism should be favoured for GC stuff in
-LLVM. Not sure if that's worth citing?}
+LLVM. Not sure if that's worth citing?} \laurie{remind me what that mechanism
+does: is it just stackmaps in disguise?}
 
 In practise, therefore, VMs using direct references have to turn to
 \emph{conservative scanning}, where the C call stack is exhaustively examined for
@@ -199,14 +207,14 @@ n.data = 1;
 untag(h);
 \end{lstlisting}
 
-Handles have significant advantages. First, tagging and untagging allows
+Handles have important advantages. First, tagging and untagging allows
 the GC to precisely determine the root set by iterating over all handles
 and considering as a root any handle with a tag count greater than 0.
 Second, handles are fully portable, do not trifle with undefined behaviour,
 and require no explicit language or compiler support.
 Third, any \texttt{Handle} with a zero tag count can have its
 underlying \texttt{Obj} safely moved. In other words, handles
-make it trivial to write precise, fully moving GCs. Comprehensive handles also
+make it trivial to write precise, (almost fully) moving GCs. Comprehensive handles also
 have the virtue that moving an \texttt{Obj} requires only updating its
 corresponding \texttt{Handle}.
 
