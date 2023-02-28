@@ -135,7 +135,9 @@ is experimental, incomplete, and unsupported, with particular problems at
 higher optimisation levels. \jake{There is also the statepoint author's article
 on how the old conservative gc.root mechanism should be favoured for GC stuff in
 LLVM. Not sure if that's worth citing?} \laurie{remind me what that mechanism
-does: is it just stackmaps in disguise?}
+does: is it just stackmaps in disguise?} \jake{it's a way of escaping an alloca
+in LLVM to some GC pass that you write yourself (which could be stackmaps or
+some other mechanism).}
 
 In practise, therefore, VMs using direct references have to turn to
 \emph{conservative scanning}, where the C call stack is exhaustively examined for
@@ -173,6 +175,7 @@ any software that breaks it tends to be rapidly fixed \laurie{cite the word-spli
 
 
 \subsection{Handles}
+\label{handles_general}
 
 An alternative approach to direct references and conservative scanning
 has become known as handles. These were first first introduced in
@@ -229,6 +232,43 @@ additional run-time costs beyond those of double indirection: each handle
 consumes memory; since handles cannot move, they can cause memory
 fragmentation; and tagging / untagging a handle requires memory reads and writes.
 
+\subsection{V8 basics}
+
+V8 is a high-performance JavaScript virtual machine (VM).
+It can be used as a standalone application or embedded into larger applications
+such as Blink (Chrome's rendering engine) or NodeJS using its \cpp API.
+A single instance of V8 can safely run many unrelated JavaScript applications by
+sandboxing them in separate execution environments known as \emph{isolates}.
+In a practical sense, an isolate is an individual VM instance with its own
+runtime (including its own instance of the V8 GC).
+JavaScript is a single-threaded language with an event loop. \jake{TODO: explain
+how this can result in stackless GCs}.
+
+The GC in V8 is generational.
+The JavaScript heap is split into young and old generations with objects
+allocated in the young generation first\footnote{The weak-generational
+hypothesis doesn't hold for some objects.
+In such cases, they can be allocated directly in the old generation to remove
+the cost of copying them later (a process known as \textit{pretenuring})}.
+distinct sections for young and old object collection. The smaller young
+generation is a Cheney style semi-space scavenger \laurie{cite} where
+\textit{tospace} and \textit{fromspace} are contiguous chunks of memory that
+young objects are bump allocated in.
+When fromspace is full, live objects are moved to tospace (or promoted to the
+old generation if they've been moved once already).
+This process repeats, with the notion of tospace and fromspace flipped.
+
+The old generation is a mark-sweep-compact collector.
+Marking is performed concurrently to the main thread of JavaScript execution to
+reduce pause times.
+\jake{TODO where does incremental marking fit in here} This requires the use of
+Dijsktra style write barriers when object fields are written to on the main
+thread.
+Sweeping is also performed concurrently to the main thread and makes use of
+parallel worker threads.
+Surviving objects are then compacted to reduce memory fragmentation.
+Compaction is not done concurrently to the main thread, however, in Chrome it
+makes use of idle time to reduce the impact of the GC pause.
 
 \section{Handles in V8}
 \label{handles_in_v8}
@@ -239,8 +279,66 @@ of the Background section, but we shouldn't try and force the description of V8
 into that vein if it doesn't fit. I can easily change the Background section to
 reflect what will most help the reader understand V8.}
 
-In this section, we give a brief overview of V8 and how its memory management
-works.
+In V8, handles are used in order for the GC to precisely locate heap objects.
+There are different kinds of handles in V8 which are used in slightly
+different ways.
+However, their main purpose remains the same: to inform the GC
+where the roots to heap objects are.
+The most common type of handle (and the most relevant to this paper) are those
+which are used to refer to heap objects from the \cpp call-stack.
+In this section, the term handle will be used to refer exclusively to this
+particular kind of handle.
+
+For performance reasons, handles are not created or destroyed individually.
+Instead, handle lifetimes are managed as part of a chain using \emph{handle
+scopes}.
+A handle scope can be thought of as a collection of many individual
+handles and is an object which exists on the stack.
+Before any reference to a heap object can be obtained from the stack, a handle
+scope must be created first which causes it to become the new active handle
+scope.
+When a reference to a JavaScript object is requested, a handle is created, and
+is automatically registered to the active handle scope.
+C++ lexical scoping and RAII is used to determine the active handle scope.
+At the end of a lexical scope in C++, the handle scope's destructor is run,
+which causes all the handles created within it to be invalidated along with it.
+Any objects which were only referenced by those handles will then be reclaimed
+during be next garbage collection.
+
+Though stack-allocated handle scopes manage the lifetimes of handles, they do
+not store the handles themselves.
+Instead, handles are dynamically allocated in
+\emph{handle blocks}.
+These contiguous blocks are linked together in a list-like structure that
+mirrors the handle scopes on the stack.
+When a new handle is created, it is automatically registered in the block which
+corresponds to the active handle scope.
+A handle will \emph{always} refer to a heap object via a pointer through the
+handle block.
+When a handle scope is destroyed, the corresponding handle block in memory is
+deleted.
+The handle blocks are reachable from the isolate, so during a collection, the GC
+is able to iterate over each block in order to build up the rootset.
+
+This scheme has two major downsides.
+Handles have an implicit performance cost: each heap object dereference requires
+two (nested) pointer dereferences, with inevitable consequences for code size,
+cache behaviour, and static optimisations.
+There is also a performance cost to creating and destroying handle blocks via
+the handle scope mechanism.
+
+Second, it requires the programmer to respect various rules that cannot be fully
+encoded in C++’s type system.
+V8 programmers must be careful not to leak a handle beyond its handle scope, or
+allocate a handle on the heap.
+\jake{There are static analysis tools for this
+though}
+Using a handle that has been invalidated (where the scope has been closed and
+thus block removed) is undefined behavior.
+This usually manifests in crashes during debug builds of Chrome, but can lead to
+more sinister errors such as use-after-frees if not caught.
+
+\jake{TODO: Root handles. Maybe? not entirely relevant}
 
 % dump
 \begin{itemize}
@@ -258,30 +356,27 @@ works.
   \item Using a handle that has been invalidated (scopes has been closed and thus block removed) is undefined behavior and results in (likely) crashes in debug builds
 \end{itemize}
 
-Minimal examples: https://gist.github.com/mlippautz/7c81854eeee27a8747cce88b922081d2
+% Minimal examples: https://gist.github.com/mlippautz/7c81854eeee27a8747cce88b922081d2
+\begin{figure}
+\begin{lstlisting}[language=C++]
+void main() {
+  HandleScope scope(GetIsolate());
 
-\subsection{V8 garbage collection basics}
-V8 is a high-performance JavaScript virtual machine (VM). It can be used as a
-standalone application or embedded into larger applications such as Chrome or
-NodeJS using its \cpp API.
+  Handle<String> str = foo();
+}
 
-V8 has a generational garbage collector with the JavaScript heap split into two
-distinct sections for young and old object collection. The smaller young
-generation is a Cheney style semi-space scavenger \laurie{cite} divided into two contiguous
-fixed size blocks of memory known as \textit{tospace} and \textit{fromspace}.
-Objects are bump allocated in fromspace until it is full, at which point live
-objects are moved to tospace which becomes the new young generation heap and so
-on. Objects which have been moved more than once in the young generation are
-promoted to the old generation.
+Handle<String> foo() {
+  HandleScope scope(GetIsolate());
 
-The old generation is a mark-sweep-compact collector. Marking is performed
-concurrently to the main thread of JavaScript execution to reduce pause times.
-Dijkstra style write barriers \jake{cite} are used when object fields are written to on the
-main thread to maintain the tri-colour marking scheme. Sweeping is also
-performed concurrently to the main thread and makes use of parallel worker
-threads. Surviving objects are then compacted to reduce memory fragmentation.
-Compaction is not done concurrently to the main thread, however, in Chrome it
-makes use of idle time to reduce the impact of the GC pause.
+  Handle<String> hello = NewString("hello");
+  Handle<String> world = NewString("world");
+
+  return scope.CloseAndEscape(hello);
+}
+\end{lstlisting}
+    \caption{\jake{TODO: inkscape diagram which goes alongside this showing
+    what happens in memory.}}
+\end{figure}
 
 
 \subsection{Blink as an API consumer}
@@ -294,23 +389,11 @@ indirect V8 handles when they cross the boundary into the V8 C++ runtime. This
 conversion to and from indirect handles takes place through OpenHandle and
 ToLocal, respectively.
 
-\subsection{Handle infrastructure}
 
-V8’s current indirect handles have a fairly complex underlying mechanism that is
-best explained in stages. Before a V8 programmer can obtain a reference to a
-JavaScript object, they must first create a handle scope, which implicitly
-becomes the ``active'' handle scope. When a reference to a JavaScript object is
-requested, an indirect handle is created, and added to the most recent handle
-scope. When the handle scope object is deleted at run-time, all the indirect
-handles created since the beginning of the handle scope’s lifetime are deleted
-together, and the previous handle scope becomes the active handle scope. At any
-point the GC can ask a handle scope to enumerate all the indirect handles it
-refers to.
+\section{Gradually Migrating from Handles to Direct References}
+\label{sec:migration}
 
-Indirect handles contain a pointer-sized value. That value points to a member of
-an intermediate set called a handle block. Handle blocks are never moved in
-memory, so pointers to a member of a handle block are always stable. Each member
-of a handle block points to a JavaScript object.
+\subsection{Direct object pointers}
 
 V8 makes use of indirect handles to store Small Integer Objects (SMIs), that is
 JavaScript integers that are not boxed on the heap. An important case is the SMI
@@ -320,11 +403,6 @@ represent a null pointer (and thus cannot be dereferenced to a handle block
 member). Handle block members with an interior value whose least significant bit
 is 0 encode a SMI; if the same bit is 1 a pointer is encoded.
 
-
-\section{Gradually Migrating from Handles to Direct References}
-\label{sec:migration}
-
-\subsection{Direct object pointers}
 \subsection{Conservative Stack Scanning}
 \section{Evaluation}
 \label{sec:evaluation}
