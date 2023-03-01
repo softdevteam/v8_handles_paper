@@ -39,6 +39,7 @@ crates handles lazily, destroys them when it doesn't need them, and tries to
 use direct references whenever it can. in contrast `comprehensive handles'
 would never use direct references. do spidermonkey and v8 use partial or
 comprehensive handles?}
+\label{comprehensive_handles}
 In this paper, we consider this long-standing implementation and design trade-off
 in the context of programming language Virtual Machines (VMs). Some VMs
 (e.g.~HotSpot, SpiderMonkey, V8) use handles; some (e.g.~JavaScriptCore and
@@ -232,11 +233,17 @@ additional run-time costs beyond those of double indirection: each handle
 consumes memory; since handles cannot move, they can cause memory
 fragmentation; and tagging / untagging a handle requires memory reads and writes.
 
-\subsection{V8 basics}
 
-V8 is a high-performance JavaScript virtual machine (VM).
-It can be used as a standalone application or embedded into larger applications
-such as Blink (Chrome's rendering engine) or NodeJS using its \cpp API.
+\subsection{Handles in V8}
+
+V8 is a widely used JavaScript VM written in C++, most commonly known as the
+Chrome browser's JavaScript VM, though it can also be used as a standalone
+application. In this section we introduce some general V8 background, before
+describing V8's use of handles.
+
+
+\subsection{V8 background}
+
 A single instance of V8 can safely run many unrelated JavaScript applications by
 sandboxing them in separate execution environments known as \emph{isolates}.
 In a practical sense, an isolate is an individual VM instance with its own
@@ -270,24 +277,58 @@ Surviving objects are then compacted to reduce memory fragmentation.
 Compaction is not done concurrently to the main thread, however, in Chrome it
 makes use of idle time to reduce the impact of the GC pause.
 
-\section{Handles in V8}
+
+\subsection{Handles in V8}
 \label{handles_in_v8}
 
-\laurie{in this section we want to go into detail into V8's handle mechanism,
-giving code examples etc. Hopefully it can build upon the simple abstract view
-of the Background section, but we shouldn't try and force the description of V8
-into that vein if it doesn't fit. I can easily change the Background section to
-reflect what will most help the reader understand V8.}
+V8 uses handles to determine the root set of objects. Unlike the simple
+VM described in \cref{comprehensive_handles}, V8 uses \emph{partial handles}:
+that is, it uses direct references in those places where it can precisely track
+them (e.g.~object slots), and handles in those places where it would otherwise
+lose track of roots (e.g.~stack references). Although there are various kinds
+of handles inside V8 \laurie{can we quickly
+enumerate all the types of handles? are they different internally, or just
+in the way they're used?} we will solely consider those handles used by C++ code
+to manipulate objects on the JavaScript heap.
 
-In V8, handles are used in order for the GC to precisely locate heap objects.
-There are different kinds of handles in V8 which are used in slightly
-different ways.
-However, their main purpose remains the same: to inform the GC
-where the roots to heap objects are.
-The most common type of handle (and the most relevant to this paper) are those
-which are used to refer to heap objects from the \cpp call-stack.
-In this section, the term handle will be used to refer exclusively to this
-particular kind of handle.
+Comprehensive handles as described in \cref{comprehensive_handles} persist
+throughout a VM's lifetime, with each heap object having a single handle
+pointing to it. In contrast, V8's partial handles are temporary, being
+regularly created and destroyed: any object may, over its lifetime, have
+multiple handles pointing to it. This has a significant impact on the way
+handles are used within V8.
+
+In essence, when V8's C++ code wishes to operate on a JavaScript object, it
+must create a handle to it, destroying that handle when it is finished. This
+can be thought of as a kind of `lock': the handle guarantees that the object
+is kept alive while C++ code works upon object, without having to worry that
+pointers to the object will be `lost' on the C++ call stack. As with other VMs
+using this style of partial handles, V8 faces two challenges: how to make
+partial handles ergonomic for the programmer; and how to make their regular
+creation and destruction fast.
+
+Since V8's C++ code uses partial handles extensively, the ergonomics of partial
+handles are vital, both for correctness and code readability. V8's basic
+mechanism to aid ergonomics is the \emph{handle scope} which stores handles.
+Any V8 code can create a new handle scope, which is pushed onto a stack: the
+most recently created handle scope is the `current' handle scope. C++'s RAII
+mechanism is used to automatically destroy handle scopes: destroying the handle
+scope also destroys all the handles created while that handle scope was active.
+All access to heap objects is via an API that returns a direct pointer to a
+heap object, while implicitly adding a handle to that object to the current
+handle scope.
+
+Handle scopes ensure that C++ code dealing with objects remains relatively
+terse, and reduces several opportunities for programmer mistakes. However, C++
+code must carefully ensure that it does not leak a direct pointer to an object
+beyond the lifetime of the handle scope that references that object --- doing
+so causes undefined behaviour. V8 has various `lints' to detect many such
+mistakes \laurie{can we give a small example?}, but they cannot capture all
+possible misuses: some misuses are later detected in debug builds, but some
+misuses end up in release code, where they can become a significant security
+concern.
+
+
 
 For performance reasons, handles are not created or destroyed individually.
 Instead, handle lifetimes are managed as part of a chain using \emph{handle
@@ -327,16 +368,7 @@ cache behaviour, and static optimisations.
 There is also a performance cost to creating and destroying handle blocks via
 the handle scope mechanism.
 
-Second, it requires the programmer to respect various rules that cannot be fully
-encoded in C++’s type system.
-V8 programmers must be careful not to leak a handle beyond its handle scope, or
-allocate a handle on the heap.
-\jake{There are static analysis tools for this
-though}
-Using a handle that has been invalidated (where the scope has been closed and
-thus block removed) is undefined behavior.
-This usually manifests in crashes during debug builds of Chrome, but can lead to
-more sinister errors such as use-after-frees if not caught.
+
 
 \jake{TODO: Root handles. Maybe? not entirely relevant}
 
