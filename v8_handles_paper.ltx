@@ -377,15 +377,6 @@ pointed to by a handle scope to be enlarged. When a handle for an object is
 requested, V8 thus performs a linear scan through the current handle scope to see if an existing
 handle to that object is present, only creating a new handle if none exists.
 
-\jake{Deleted the part below on Blink as an API consumer and replaced it with
-this, not sure where it goes, it could even be folded into the first paragraph}
-The handle scope rules must be followed both inside the V8 codebase and also by
-embedders who wish to access the JavaScript heap. To avoid exposing too many
-internal details, V8's embedder API exposes a stripped down version of handles
-and handle scopes which mirrors its internal implementation. For legacy reasons,
-handles exposed to embedders are referred to as locals, while inside V8 they are
-still called handles.
-
 % dump
 \begin{itemize}
   \item There's many different kind of handles in V8. They have two purposes: (a) allow the GC to find those object references and (b) allow the GC to relocate objects.
