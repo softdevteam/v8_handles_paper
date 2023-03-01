@@ -367,6 +367,39 @@ handle to that object is present, only creating a new handle if none exists.
 \section{Gradually Migrating from Handles to Direct References}
 \label{sec:migration}
 
+Handles in V8 are represented by the \lstinline{Handle<T>} class. This is used
+by V8 programmers as if it were a wrapper around a pointer into the heap. It has
+an API that allows it to be used as if it were a direct pointer (e.g.
+\lstinline{operator*} is overloaded to return \lstinline{Object<T>}).
+\lstinline{Handle} is a single pointer-sized machine word, and can be put in
+registers and on the C++ stack. Handles are used pervasively throughout the V8
+codebase, almost all functions which do something with objects on the heap will
+either take \lstinline{Handle}s as arguments, or return them.
+
+Contrary to what one might expect when switching to direct heap references, we
+do not swap out \lstinline{Handle} objects for raw pointers. This is because
+almost all existing V8 code that operates on JavaScript heap objects does so via
+methods on \lstinline{Handle} objects. Instead, we introduced a new class,
+\lstinline{DirectHandle<T>}\footnote{This is somewhat of a misnomer as
+``direct'' and ``handle'' are inherently contradictory. However, this was chosen
+as a compromise as it differentiates them from existing handles while ensuring
+their use in the codebase is one V8 developers are familiar with.} which, unlike
+\lstinline{Handle<T>}, contains a direct reference to objects on the JavaScript
+heap. To make migration easier, \lstinline{DirectHandle} contains methods whose
+signatures mirror those found in \lstinline{Handle}. For many parts of V8, this
+means that direct references can be used in place of handles by changing the
+type name.
+
+We chose four parts of V8 for our migration experiment: 1) the V8 embedder API
+layer (where V8 interacts with other applications, such as the Blink rendering
+engine in Chrome); 2) the interface between C++ code and V8's JIT compiled
+JavaScript runtime; 3) JavaScript object definitions and implementations; 4)
+intrinsics, builtins, and runtime functions. These parts of V8 were selected for
+two reasons: first, they are integral parts of V8 of considerable complexity, so
+successfully migrating them gives us confidence that direct references are a
+practical alternative; second, they are parts of V8 where handles have
+previously been identified as possible performance bottlenecks.
+
 \subsection{Direct object pointers}
 
 V8 makes use of indirect handles to store Small Integer Objects (SMIs), that is
