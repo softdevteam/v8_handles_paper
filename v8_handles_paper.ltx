@@ -461,6 +461,30 @@ Therefore making stack scanning conservative may not be an issue in practise.
 Add Speedometer numbers how often we finalize with a stack there.
 Maybe add browsing benchmark numbers to confirm impact\hannes{discuss with the team}.
 
+\subsection{Limitations}
+\begin{itemize}
+    \item We have to disable the young generation, because the sticky mark bit
+        YG is not yet implemented, so it's hard to do a like-for-like comparison
+        with the current version of Chrome.
+    \item I can't run PGO builds because it's a Google interal only setting.
+    \item We run Speedometer on the live site.
+    \item Speedometer is a synthetic benchmark suite, and while it's used by
+        most of the major browser vendors to measure performance I don't know
+        how translatable this is to the real world.
+    \item Chrome (and other JavaScript VMs) are unique in that they can cleverly
+        schedule GC to happen at the event loop (when there is no stack). This
+        means they can avoid the conservative stack scanning cost altogether in
+        most collections (\jake{Hannes says this is around 89\% of the time}).
+        So while this is good news for V8, I'm wary of making the more broad
+        statement that direct handles plus CSS is faster. Most VMs would always
+        have to scan the stack during GC.
+    \item CSS prevents moving, so we must disable compaction when there is a
+        stack. However, we don't do a comparison between handles with
+        compaction, and direct references without compaction. Perhaps we should?
+        Though this would likely regress because the GC that exists today is not
+        built with CSS in mind.
+\end{itemize}
+
 \makeatletter
 \newcommand*\ExpandableInput[1]{\@@input#1 }
 \makeatother
