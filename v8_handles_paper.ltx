@@ -476,7 +476,7 @@ Maybe add browsing benchmark numbers to confirm impact\hannes{discuss with the t
         means they can avoid the conservative stack scanning cost altogether in
         most collections (\jake{Hannes says this is around 89\% of the time}).
         So while this is good news for V8, I'm wary of making the more broad
-        statement that direct handles plus CSS is faster. Most VMs would always
+        statement that direct references plus CSS is faster. Most VMs would always
         have to scan the stack during GC.
     \item CSS prevents moving, so we must disable compaction when there is a
         stack. However, we don't do a comparison between handles with
