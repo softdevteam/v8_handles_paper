@@ -240,49 +240,17 @@ fragmentation; and tagging / untagging a handle requires memory reads and writes
 
 \section{Handles in V8}
 
-V8 is a widely used JavaScript VM written in C++, most commonly known as the
+V8 is a widely used JavaScript VM, most commonly known as the
 Chrome browser's JavaScript VM, though it can also be used as a standalone
 application. In this section we introduce some general V8 background, before
 describing V8's use of handles.
 
+V8 is largely written in C++, A single V8 process can run many unrelated
+JavaScript programs by sandboxing them in \emph{isolates}. V8 contains a high
+performance generational GC, which performs marking concurrently to the main
+JavaScript thread. The GC heap is compacted during idle time in execution
+\laurie{i.e.~stop the world?}.
 
-\subsection{V8 background}
-
-A single instance of V8 can safely run many unrelated JavaScript applications by
-sandboxing them in separate execution environments known as \emph{isolates}.
-In a practical sense, an isolate is an individual VM instance with its own
-runtime (including its own instance of the V8 GC).
-JavaScript is a single-threaded language with an event loop. \jake{TODO: explain
-how this can result in stackless GCs}.
-
-The GC in V8 is generational.
-The JavaScript heap is split into young and old generations with objects
-allocated in the young generation first\footnote{The weak-generational
-hypothesis doesn't hold for some objects.
-In such cases, they can be allocated directly in the old generation to remove
-the cost of copying them later (a process known as \textit{pretenuring})}.
-distinct sections for young and old object collection. The smaller young
-generation is a Cheney style semi-space scavenger \laurie{cite} where
-\textit{tospace} and \textit{fromspace} are contiguous chunks of memory that
-young objects are bump allocated in.
-When fromspace is full, live objects are moved to tospace (or promoted to the
-old generation if they've been moved once already).
-This process repeats, with the notion of tospace and fromspace flipped.
-
-The old generation is a mark-sweep-compact collector.
-Marking is performed concurrently to the main thread of JavaScript execution to
-reduce pause times.
-\jake{TODO where does incremental marking fit in here} This requires the use of
-Dijsktra style write barriers when object fields are written to on the main
-thread.
-Sweeping is also performed concurrently to the main thread and makes use of
-parallel worker threads.
-Surviving objects are then compacted to reduce memory fragmentation.
-Compaction is not done concurrently to the main thread, however, in Chrome it
-makes use of idle time to reduce the impact of the GC pause.
-
-
-\subsection{Handles in V8}
 \label{handles_in_v8}
 
 V8 uses handles to determine the root set of objects. Unlike the simple
