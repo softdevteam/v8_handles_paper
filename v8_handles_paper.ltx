@@ -421,7 +421,7 @@ less predictable performance. We set the CPU governer in Linux to
 \emph{performance} to prevent Linux from scaling down the CPU frequency midway
 through the benchmark runs.
 
-\subsubsection{Benchmarks}
+\subsection{Benchmarks}
 
 We evaluate each browser configuration on the \speedometer browser benchmark
 suite\jake{cite} using Chrome's Crossbench benchmark runner. \speedometer is a
@@ -454,7 +454,7 @@ references) has on Chrome. All four configurations use a single generation heap
 because the young generation scavenger is a moving semi-space collector, and
 work to move this to a non-moving generational GC has not yet been carried out.
 
-\subsubsection{Results}
+\subsection{Results}
 
 89\% of garbage collections in Chrome are happening without a stack when we are on the message loop.
 Therefore making stack scanning conservative may not be an issue in practise.
