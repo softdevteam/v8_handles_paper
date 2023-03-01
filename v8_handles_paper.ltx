@@ -286,17 +286,10 @@ V8 uses handles to determine the root set of objects. Unlike the simple
 VM described in \cref{comprehensive_handles}, V8 uses \emph{partial handles}:
 that is, it uses direct references in those places where it can precisely track
 them (e.g.~object slots), and handles in those places where it would otherwise
-lose track of roots (e.g.~stack references). Although there are various kinds
-of handles inside V8 \laurie{can we quickly
-enumerate all the types of handles? are they different internally, or just
-in the way they're used?} \jake{There are different handles both internally and
-externally. Internally there are `root handles`, which point to roots in the
-isolate (e.g. the Oddball, true and false objects, etc), these are used the same
-way as regular handles (perhaps these are not worth mentioning). Then, at the API layer, there are: persistent handles,
-eternals, and traced reference handles. Their names are somewhat explanatory but
-the common difference between them and regular handles is that they are not
-managed by handle scopes}we will solely consider those handles used by C++ code
-to manipulate objects on the JavaScript heap.
+lose track of roots (e.g.~stack references). Although V8 has various kinds
+of handles (e.g.~root handles, persistent handles, eternals, and traced
+reference handles), most of these have very narrow, specific uses: we focus in
+this paper exclusively on `normal' handles.
 
 Comprehensive handles as described in \cref{comprehensive_handles} persist
 throughout a VM's lifetime, with each heap object having a single handle
@@ -331,7 +324,8 @@ code must carefully ensure that it does not leak a direct pointer to an object
 beyond the lifetime of the handle scope that references that object --- doing
 so causes undefined behaviour. V8 has various `lints' to detect many such
 mistakes \laurie{can we give a small example?} \jake{of a bug that made it into
-release which was patched?}, but they cannot capture all
+release which was patched?} \laurie{basically can we give a quick 1 sentence
+summary of a lint?}, but they cannot capture all
 possible misuses: some misuses are later detected in debug builds, but some
 misuses end up in release code, where they can become a significant security
 concern.
@@ -375,16 +369,13 @@ a handle scope causes its backing storage containing multiple handles
 to be destroyed in one go: neither individual deallocation nor any form
 of handle compaction is necessary.
 
-\laurie{this next bit is me inferring from a half-forgotten conversation}
-\jake{it's correct though :)}A
-further optimisation is based on the observation that within a given handle
+A further optimisation is based on the observation that within a given handle
 scope it is common for the same object to be referenced multiple times.
 Although it is always correct to create multiple handles to the same object, it
 is inefficient, since each handle requires memory, requiring the storage area
 pointed to by a handle scope to be enlarged. When a handle for an object is
-requested, V8 thus searches the current handle scope to see if an existing
+requested, V8 thus performs a linear scan through the current handle scope to see if an existing
 handle to that object is present, only creating a new handle if none exists.
-\laurie{is this just a linear scan?} \jake{it is, yes}
 
 \jake{Deleted the part below on Blink as an API consumer and replaced it with
 this, not sure where it goes, it could even be folded into the first paragraph}
