@@ -435,13 +435,33 @@ Maybe add browsing benchmark numbers to confirm impact\hannes{discuss with the t
 \begin{figure*}[t]
     \begin{tabular}{lll}
 \toprule
-        Benchmark & Handles (ms) & Direct Pointers (ms) \\
+        Benchmark & HandlesMinGC (ms) & DirectPointersMinGc (ms) \\
 \midrule
 \input{table_no_gc.tex}
 \end{tabular}
-\caption{The mean results froms 100 iterations of the Speedometer2.1 benchmark suite
-    on both configurations of Chrome}
+\caption{The mean results from 100 iterations of the Speedometer2.1 benchmark suite
+    Chrome. Both the handle and direct pointer configurations are setup to fill
+    the full 4GiB heap before triggering GC. They both trigger a single GC only
+    on each iteration of Speedometer2.1. The DirectPointersMinGc configuration
+    uses conservative stack scanning to find the rootset for GC. They are both
+    running with a single generation heap.}
 \end{figure*}
+
+\begin{figure*}[t]
+    \begin{tabular}{lll}
+\toprule
+        Benchmark & HandlesNoStackCompact (ms) & DirectPointersNoStackCompact (ms) \\
+\midrule
+\input{table_no_stack_compact.tex}
+\end{tabular}
+\caption{The mean results from 10 iterations of the Speedometer2.1 benchmark
+    suite Chrome. Both the handle and direct pointer configurations are setup to
+    not compact the heap when there are roots on the stack. The
+    DirectPointersNoStackCompact configuration uses conservative stack
+    scanning to find the rootset for GC. They are both running with a single
+    generation heap.}
+\end{figure*}
+
 \section{Related Work}
 \label{sec:related}
 
