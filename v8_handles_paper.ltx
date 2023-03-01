@@ -411,59 +411,100 @@ member). Handle block members with an interior value whose least significant bit
 is 0 encode a SMI; if the same bit is 1 a pointer is encoded.
 
 \subsection{Conservative Stack Scanning}
+
+
 \section{Evaluation}
 \label{sec:evaluation}
 
-\subsection{Setup}
+In order to understand the performance effects of migrating from handles to direct
+references, we conducted an experiment on several variants of V8 running the
+\speedometer benchmark suite. We first outline our methodology (\cref{methodology})
+before examining the results (\cref{results}).
+
+
+\subsection{Methodology}
+
+\makeatletter
+\newcommand*\ExpandableInputTwo[1]{\@@input#1 }
+\makeatother
+
+ \begin{table*}[t]
+     \begin{tabular}{lll}
+ \toprule
+         Benchmark & Handles (ms) & Direct Refs (ms) \\
+ \midrule
+\ExpandableInputTwo{./table_no_stack_compact}
+ \bottomrule
+ \end{tabular}
+\caption{Results from our first experiment: a straightforward comparison
+   between handles and direct references with the GC (largely) running as
+   normal on \speedometer. This implicitly includes the full costs of both
+   handles (creating handles; destroying handles; an extra level of
+   indirection) and direct references (conservative stack scanning). We ran
+   \speedometer 30 times and report 99\% confidence intervals. These results
+   clearly show that, within the margin of errors, V8 partly migrated to direct
+   references is no slower than running solely with handles.}
+\end{table*}
+
+The overall question we would like our experiment to answer is: are handles
+or direct references faster? While we can provide an accurate assessment
+of handles performance, we are only able to provide a lower bound of
+direct references' performance: around half of V8's (large) codebase remains
+unmigrated, and the conservative stack scanner we have implemented is naive,
+and thus slower than a production version. We are also forced to use a single
+generation heap because the young generation scavenger is a moving semi-space
+collector, and work to move this to a non-moving generational GC has not yet
+been carried out. Fortunately, and despite these restrictions, our experiment
+is able to provide valuable insights.
+
+The first experiment we run is a straightforward comparison between handles and direct
+references, with the GC running as normal (subject to the restrictions noted
+earlier). This implicitly includes the full costs of both handles (creating
+handles; destroying handles; an extra level of indirection) and direct
+references (conservative stack scanning). We disable heap
+compaction when a GC is scheduled while there are frames on the C++ stack \laurie{why?}.
+
+The second experiment we run aims to tease out the mutator performance of
+handles and direct references from the
+GC costs \laurie{i understand this means we (mostly) don't pay stack scanning
+costs with direct references, but what does it mean for handles?}. While we
+would ideally prevent the GC from running entirely in this experiment, we
+cannot run our benchmark suite without filling V8's heap, which has a 4GiB
+maximum size. We therefore prevented the GC from running until the heap reached
+this maximum limit: on our benchmark suite, this corresponds to a single
+collection per iteration.
+
+We evaluate each browser variant on the well known \speedometer browser benchmark
+suite~\jake{cite} using Chrome's Crossbench benchmark runner. \speedometer
+consists of 16 benchmarks (or `stories'), each of which simulates common
+user interactions in a browser. We used Crossbench to run \speedometer
+for \laurie{30?} \emph{process executions}, where we close down the browser
+and start a new browser. Crossbench records the wall-clock time of each individual
+benchmark as well as the total time of the process execution \laurie{when does
+the clock start and stop for the process execution?}.
+\laurie{i don't understand this: is it an additional experiment? ``We also used
+Crossbench to benchmark each browser configuration running indivial
+\speedometer stories in isolation. In other words, each story would use a fresh
+browser instance.''}
 
 We use Chrome version 112.0.55572 and V8 version 11.2.28. The benchmarks were
-run on a Xeon E3-1240 v6 3.7GHz with 4 cores, and 32GB of RAM, running Debian 8.
-We disabled turbo boost and hyper-threading in the BIOS as these can lead to
-less predictable performance. We set the CPU governer in Linux to
-\emph{performance} to prevent Linux from scaling down the CPU frequency midway
-through the benchmark runs.
+run on a Xeon E3-1240v6 3.7GHz CPU cores, with 32GB of RAM, and running Debian 8.
+We disabled turbo boost and hyper-threading in the BIOS and set Linux's CPU
+governor to \emph{performance} mode. We observed the \texttt{dmesg} after
+benchmarking and did not observe any oddities such as the machine overheating.
 
-\subsection{Benchmarks}
-
-We evaluate each browser configuration on the \speedometer browser benchmark
-suite\jake{cite} using Chrome's Crossbench benchmark runner. \speedometer is a
-popular browser benchmarking suite used to measure web application
-responsiveness. A single run of \speedometer consists of 16 \emph{stories}:
-small JavaScript applications used to simulate common user interactions on the
-web. Crossbench runs each \speedometer iteration in a fresh browser instance, and
-records the wall-clock time for each indivial story and total time the iteration
-took. We also used Crossbench to benchmark each browser configuration running
-indivial \speedometer stories in isolation. In other words, each story would use
-a fresh browser instance.
-
-We evalute four different browser configurations. First we try to isolate the
-effect that partial direct reference conversion has on the mutator alone without
-GC cost. To do this we use two configurations, \directmin, and \handlesmin,
-which fill V8's 4GB heap entirely before scheduling a garbage collection. We
-used a local patch in V8 to limit GC scheduling for both of these
-configurations. We also disabled incremental marking. It was not possible to
-remove GC entirely as \speedometer would run out of memory before completion. We
-recorded that each configuration scheduled a single GC for each \speedometer
-iteration.
-
-The second two configurations also evaluate the difference between partial
-direct pointers and handles, but with a normal GC schedule. We disable heap
-compaction when a GC is scheduled while there are frames on the C++ stack. These
-two configurations, \directnocompact and \handlesnocompact thus measure not only
-the difference in mutator time between direct references and handles, but also
-the impact that conservative stack scanning (a necessary byproduct of direct
-references) has on Chrome. All four configurations use a single generation heap
-because the young generation scavenger is a moving semi-space collector, and
-work to move this to a non-moving generational GC has not yet been carried out.
 
 \subsection{Results}
+
 
 89\% of garbage collections in Chrome are happening without a stack when we are on the message loop.
 Therefore making stack scanning conservative may not be an issue in practise.
 Add Speedometer numbers how often we finalize with a stack there.
 Maybe add browsing benchmark numbers to confirm impact\hannes{discuss with the team}.
 
-\subsection{Limitations}
+
+\section{Threats to Validity}
+
 \begin{itemize}
     \item We have to disable the young generation, because the sticky mark bit
         YG is not yet implemented, so it's hard to do a like-for-like comparison
@@ -494,38 +535,18 @@ Maybe add browsing benchmark numbers to confirm impact\hannes{discuss with the t
  \begin{table*}[t]
      \begin{tabular}{lll}
  \toprule
-         Benchmark & HandlesMinGC (ms) & DirectPointersMinGc (ms) \\
+         Benchmark & Handles (ms) & Direct Refs (ms) \\
  \midrule
 \ExpandableInput{./table_no_gc}
  \bottomrule
  \end{tabular}
-\caption{The mean results from 100 iterations of the Speedometer2.1 benchmark suite
-    Chrome. Both the handle and direct pointer configurations are setup to fill
-    the full 4GiB heap before triggering GC. They both trigger a single GC only
-    on each iteration of Speedometer2.1. The DirectPointersMinGc configuration
-    uses conservative stack scanning to find the rootset for GC. They are both
-    running with a single generation heap.}
+\caption{Results from our second experiment: teasing out the mutator
+   performance of handles and direct references without GC costs. We ran
+   \speedometer 30 times and report 99\% confidence intervals. This clearly
+   shows that, when GC is remove from the equation, direct references are
+   faster.}
 \end{table*}
 
-\makeatletter
-\newcommand*\ExpandableInputTwo[1]{\@@input#1 }
-\makeatother
-
- \begin{table*}[t]
-     \begin{tabular}{lll}
- \toprule
-         Benchmark & HandlesNoStackCompact (ms) & DirectPointersNoStackCompact (ms) \\
- \midrule
-\ExpandableInputTwo{./table_no_stack_compact}
- \bottomrule
- \end{tabular}
-\caption{The mean results from 30 iterations of the Speedometer2.1 benchmark
-    suite on Chrome. Both the handle and direct pointer configurations are setup to
-    not compact the heap when there are roots on the stack. The
-    DirectPointersNoStackCompact configuration uses conservative stack
-    scanning to find the rootset for GC. They are both running with a single
-    generation heap.}
-\end{table*}
 
 \section{Related Work}
 \label{sec:related}
