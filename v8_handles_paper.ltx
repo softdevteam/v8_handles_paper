@@ -27,12 +27,13 @@ A major challenge for Garbage Collection (GC) is finding all the \emph{roots},
 that is the starting set of references into the object graph. Ideally, GCs
 would be able to precisely enumerate the root set. However, current languages
 and compilers make this difficult, or impossible, as pointers
-to objects can be `lost' on the call stack: to compensate, we are forced
-to conservatively scan the call stack. This means over-approximating the root
-set by looking at each word on the stack, and checking whether it looks like
-a pointer to an object. To avoid conservative scanning, we can use \emph{handles}, that
-is wrappers around object references, such that we can use the handles as the
-(precise) root set.
+to objects can be `lost' on the call stack: to compensate, the call stack
+must be \emph{conservatively scanned}, looking for pointers to objects on
+the heap. This over-approximates the true root set as some non-pointers
+may have a value which also happens to be a pointer to an object.
+To avoid conservative scanning, one can use \emph{handles}, that
+is wrappers around object references, such that the handles allow \emph{precise}
+enumeration of the root set.
 
 \laurie{V8 uses what i'm tentatively calling `partial handles`: that is, it
 crates handles lazily, destroys them when it doesn't need them, and tries to
@@ -53,7 +54,7 @@ clear evidence for the run-time costs of handles relative to direct references
 and conservative scanning. Without such an understanding, it is difficult to
 state with confidence whether direct references or handles are the better trade-off.
 
-In this paper we examine the widely used JavaScript VM \emph{V8}, which has
+In this paper we examine the widely used JavaScript VM V8, which has
 been designed from its inception to use handles. Our hypothesis is
 that moving from handles to direct references (and thus also conservative scanning) will improve V8's performance.
 However, moving wholesale from handles to direct references is impractical on a
