@@ -10,7 +10,7 @@ wrappers around pointers to heap objects, to allow the root set of GCed
 \emph{direct references} to heap objects, requiring the C/C++ call stack to
 be conservatively scanned for values that appear to be pointers to heap
 objects. In this paper we study the performance difference
-between these two approaches by migrating part of V8 from handles to
+between these two approaches by migrating around half of V8 from handles to
 pointers: we show that, even though our partial migration imposes
 additional costs and our conservative stack scanner is naive, direct
 references are at least as fast as handles.
@@ -62,9 +62,9 @@ codebase of V8's size (~1.75m lines of code) \jake{does this include torque file
 Our first challenge was thus
 to find a practical means for gradually migrating parts of V8 from handles to
 direct references (Section~\ref{sec:migration}). Having then migrated a
-substantial portion of V8 from handles to direct references \laurie{can we give
-a rough fraction/percentage?}, and implemented a naive conservative stack
-scanner, we then run we then run several standard V8 benchmark
+around half of V8 from handles to direct references,
+and implemented a naive conservative stack
+scanner, we then run several standard V8 benchmark
 suites, and find that direct references are at least as fast as handles
 (\cref{sec:evaluation}). This
 suggests that a complete migration of V8 to direct references, and a more
