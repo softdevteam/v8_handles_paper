@@ -4,16 +4,16 @@
 \begin{document}
 
 \begin{abstract}
-Many production virtual machines implemented in C++ like Oracle's HotSpot Java engine~\cite{}, Mozilla's SpiderMonkey JavaScript engine~\cite{}, and Google's V8 JavaScript engine~\cite{} wrap pointers to objects on the garbarge collected heap in so-called \emph{handles}.
-Handles are used by the garbage collector to find all refencerenes to such on-heap objects on the stack when garbage collection is triggered during program execution with an active call stack of C++ functions.
-A garbage collector is \emph{precise} if all on-heap references can be precisely identified by the garbage collector.
-Otherwise it is \emph{conservative} which means that the garbage collector may find data values which look like references.
-For such values a conservative garbage collector has to conservatively assume that they are references.
-
-The performance impact of handles on performance is not well understood and discussed in literature and in practise.
-%The performance merits of using handles or direct references for garbage collection have long been debated, but there are few published comparisons.
-In this paper we study the difference between handles and direct references and provide concrete evidence of the performance differences between these two approaches by migrating a substantial portion of V8 from handles to direct references.
-To support direct references in V8, we change V8's precise stack scanning mechanism to a conservative one and study the memory and performance overhead.
+Some programming language Virtual Machines (VMs) use \emph{handles}, that is
+wrappers around pointers to heap objects, to allow the root set of GCed
+(Garbage Collected objects to be precisely enumerated. Other VMs use
+\emph{direct references} to heap objects, requiring the C/C++ call stack to
+be conservatively scanned for values that appear to be pointers to heap
+objects. The performance costs, or benefits, of handles and conservative
+scanning are not well understood. In this paper we study the difference
+between these two approaches in the context of V8, a VM which currently uses
+handles, by migrating a substantial portion of V8 from handles to direct
+references, requiring the introduction of conservative stack scanning.
 On the Speedometer browser benchmark~\cite{}, the use of direct references improves the total score by \laurie{X\%} while keeping the impact of conservative stack scanning on memory consumption and garbage collection pause times negligible.
 \end{abstract}
 
