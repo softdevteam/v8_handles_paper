@@ -412,6 +412,50 @@ is 0 encode a SMI; if the same bit is 1 a pointer is encoded.
 \section{Evaluation}
 \label{sec:evaluation}
 
+\subsection{Setup}
+
+We use Chrome version 112.0.55572 and V8 version 11.2.28. The benchmarks were
+run on a Xeon E3-1240 v6 3.7GHz with 4 cores, and 32GB of RAM, running Debian 8.
+We disabled turbo boost and hyper-threading in the BIOS as these can lead to
+less predictable performance. We set the CPU governer in Linux to
+\emph{performance} to prevent Linux from scaling down the CPU frequency midway
+through the benchmark runs.
+
+\subsubsection{Benchmarks}
+
+We evaluate each browser configuration on the \speedometer browser benchmark
+suite\jake{cite} using Chrome's Crossbench benchmark runner. \speedometer is a
+popular browser benchmarking suite used to measure web application
+responsiveness. A single run of \speedometer consists of 16 \emph{stories}:
+small JavaScript applications used to simulate common user interactions on the
+web. Crossbench runs each \speedometer iteration in a fresh browser instance, and
+records the wall-clock time for each indivial story and total time the iteration
+took. We also used Crossbench to benchmark each browser configuration running
+indivial \speedometer stories in isolation. In other words, each story would use
+a fresh browser instance.
+
+We evalute four different browser configurations. First we try to isolate the
+effect that partial direct reference conversion has on the mutator alone without
+GC cost. To do this we use two configurations, \directmin, and \handlesmin,
+which fill V8's 4GB heap entirely before scheduling a garbage collection. We
+used a local patch in V8 to limit GC scheduling for both of these
+configurations. We also disabled incremental marking. It was not possible to
+remove GC entirely as \speedometer would run out of memory before completion. We
+recorded that each configuration scheduled a single GC for each \speedometer
+iteration.
+
+The second two configurations also evaluate the difference between partial
+direct pointers and handles, but with a normal GC schedule. We disable heap
+compaction when a GC is scheduled while there are frames on the C++ stack. These
+two configurations, \directnocompact and \handlesnocompact thus measure not only
+the difference in mutator time between direct references and handles, but also
+the impact that conservative stack scanning (a necessary byproduct of direct
+references) has on Chrome. All four configurations use a single generation heap
+because the young generation scavenger is a moving semi-space collector, and
+work to move this to a non-moving generational GC has not yet been carried out.
+
+\subsubsection{Results}
+
 89\% of garbage collections in Chrome are happening without a stack when we are on the message loop.
 Therefore making stack scanning conservative may not be an issue in practise.
 Add Speedometer numbers how often we finalize with a stack there.
