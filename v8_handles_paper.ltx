@@ -6,7 +6,7 @@
 \begin{abstract}
 Some programming language Virtual Machines (VMs) use \emph{handles}, that is
 wrappers around pointers to heap objects, to allow the root set of GCed
-(Garbage Collected objects to be precisely enumerated. Other VMs use
+(Garbage Collected) objects to be precisely enumerated. Other VMs use
 \emph{direct references} to heap objects, requiring the C/C++ call stack to
 be conservatively scanned for values that appear to be pointers to heap
 objects. The performance costs, or benefits, of handles and conservative
@@ -14,7 +14,9 @@ scanning are not well understood. In this paper we study the difference
 between these two approaches in the context of V8, a VM which currently uses
 handles, by migrating a substantial portion of V8 from handles to direct
 references, requiring the introduction of conservative stack scanning.
-On the Speedometer browser benchmark~\cite{}, the use of direct references improves the total score by \laurie{X\%} while keeping the impact of conservative stack scanning on memory consumption and garbage collection pause times negligible.
+On the Speedometer browser benchmark~\cite{}, the use of direct references
+    improves the total score by \laurie{X\%} \jake{do we use the number for full
+    GC scheduling here? (table 2)}while keeping the impact of conservative stack scanning on memory consumption and garbage collection pause times negligible.
 \end{abstract}
 
 
