@@ -432,13 +432,18 @@ Therefore making stack scanning conservative may not be an issue in practise.
 Add Speedometer numbers how often we finalize with a stack there.
 Maybe add browsing benchmark numbers to confirm impact\hannes{discuss with the team}.
 
-\begin{figure*}[t]
-    \begin{tabular}{lll}
-\toprule
-        Benchmark & HandlesMinGC (ms) & DirectPointersMinGc (ms) \\
-\midrule
-\input{table_no_gc.tex}
-\end{tabular}
+\makeatletter
+\newcommand*\ExpandableInput[1]{\@@input#1 }
+\makeatother
+
+ \begin{figure*}[t]
+     \begin{tabular}{lll}
+ \toprule
+         Benchmark & HandlesMinGC (ms) & DirectPointersMinGc (ms) \\
+ \midrule
+\ExpandableInput{./table_no_gc}
+ \bottomrule
+ \end{tabular}
 \caption{The mean results from 100 iterations of the Speedometer2.1 benchmark suite
     Chrome. Both the handle and direct pointer configurations are setup to fill
     the full 4GiB heap before triggering GC. They both trigger a single GC only
@@ -447,15 +452,20 @@ Maybe add browsing benchmark numbers to confirm impact\hannes{discuss with the t
     running with a single generation heap.}
 \end{figure*}
 
-\begin{figure*}[t]
-    \begin{tabular}{lll}
-\toprule
-        Benchmark & HandlesNoStackCompact (ms) & DirectPointersNoStackCompact (ms) \\
-\midrule
-\input{table_no_stack_compact.tex}
-\end{tabular}
+\makeatletter
+\newcommand*\ExpandableInputTwo[1]{\@@input#1 }
+\makeatother
+
+ \begin{figure*}[t]
+     \begin{tabular}{lll}
+ \toprule
+         Benchmark & HandlesNoStackCompact (ms) & DirectPointersNoStackCompact (ms) \\
+ \midrule
+\ExpandableInputTwo{./table_no_stack_compact}
+ \bottomrule
+ \end{tabular}
 \caption{The mean results from 30 iterations of the Speedometer2.1 benchmark
-    suite Chrome. Both the handle and direct pointer configurations are setup to
+    suite on Chrome. Both the handle and direct pointer configurations are setup to
     not compact the heap when there are roots on the stack. The
     DirectPointersNoStackCompact configuration uses conservative stack
     scanning to find the rootset for GC. They are both running with a single
