@@ -288,7 +288,13 @@ them (e.g.~object slots), and handles in those places where it would otherwise
 lose track of roots (e.g.~stack references). Although there are various kinds
 of handles inside V8 \laurie{can we quickly
 enumerate all the types of handles? are they different internally, or just
-in the way they're used?} we will solely consider those handles used by C++ code
+in the way they're used?} \jake{There are different handles both internally and
+externally. Internally there are `root handles`, which point to roots in the
+isolate (e.g. the Oddball, true and false objects, etc), these are used the same
+way as regular handles (perhaps these are not worth mentioning). Then, at the API layer, there are: persistent handles,
+eternals, and traced reference handles. Their names are somewhat explanatory but
+the common difference between them and regular handles is that they are not
+managed by handle scopes}we will solely consider those handles used by C++ code
 to manipulate objects on the JavaScript heap.
 
 Comprehensive handles as described in \cref{comprehensive_handles} persist
@@ -323,7 +329,8 @@ terse, and reduces several opportunities for programmer mistakes. However, C++
 code must carefully ensure that it does not leak a direct pointer to an object
 beyond the lifetime of the handle scope that references that object --- doing
 so causes undefined behaviour. V8 has various `lints' to detect many such
-mistakes \laurie{can we give a small example?}, but they cannot capture all
+mistakes \laurie{can we give a small example?} \jake{of a bug that made it into
+release which was patched?}, but they cannot capture all
 possible misuses: some misuses are later detected in debug builds, but some
 misuses end up in release code, where they can become a significant security
 concern.
@@ -367,7 +374,8 @@ a handle scope causes its backing storage containing multiple handles
 to be destroyed in one go: neither individual deallocation nor any form
 of handle compaction is necessary.
 
-\laurie{this next bit is me inferring from a half-forgotten conversation} A
+\laurie{this next bit is me inferring from a half-forgotten conversation}
+\jake{it's correct though :)}A
 further optimisation is based on the observation that within a given handle
 scope it is common for the same object to be referenced multiple times.
 Although it is always correct to create multiple handles to the same object, it
@@ -375,11 +383,16 @@ is inefficient, since each handle requires memory, requiring the storage area
 pointed to by a handle scope to be enlarged. When a handle for an object is
 requested, V8 thus searches the current handle scope to see if an existing
 handle to that object is present, only creating a new handle if none exists.
-\laurie{is this just a linear scan?}
+\laurie{is this just a linear scan?} \jake{it is, yes}
 
-
-
-\jake{TODO: Root handles. Maybe? not entirely relevant}
+\jake{Deleted the part below on Blink as an API consumer and replaced it with
+this, not sure where it goes, it could even be folded into the first paragraph}
+The handle scope rules must be followed both inside the V8 codebase and also by
+embedders who wish to access the JavaScript heap. To avoid exposing too many
+internal details, V8's embedder API exposes a stripped down version of handles
+and handle scopes which mirrors its internal implementation. For legacy reasons,
+handles exposed to embedders are referred to as locals, while inside V8 they are
+still called handles.
 
 % dump
 \begin{itemize}
@@ -396,18 +409,6 @@ handle to that object is present, only creating a new handle if none exists.
   \item This is much cheaper than the individual root handle version but comes with the restriction to (a) require setting up handle scopes in some stack-like fashion and (b) not using handles that have had their scopoe closed and block removed
   \item Using a handle that has been invalidated (scopes has been closed and thus block removed) is undefined behavior and results in (likely) crashes in debug builds
 \end{itemize}
-
-\subsection{Blink as an API consumer}
-
-\laurie{i'm not sure this section is relevant to the paper?}
-Handles (and handle scopes) are internal V8 concepts which are not exposed in
-the external API. Instead the API bindings layer exposes locals — a separate
-class which mirrors a subset of the indirect handle API. Like indirect handles,
-locals use two-level indirection to JavaScript objects, and are converted to
-indirect V8 handles when they cross the boundary into the V8 C++ runtime. This
-conversion to and from indirect handles takes place through OpenHandle and
-ToLocal, respectively.
-
 
 \section{Gradually Migrating from Handles to Direct References}
 \label{sec:migration}
