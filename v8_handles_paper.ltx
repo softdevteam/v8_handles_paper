@@ -234,7 +234,7 @@ consumes memory; since handles cannot move, they can cause memory
 fragmentation; and tagging / untagging a handle requires memory reads and writes.
 
 
-\subsection{Handles in V8}
+\section{Handles in V8}
 
 V8 is a widely used JavaScript VM written in C++, most commonly known as the
 Chrome browser's JavaScript VM, though it can also be used as a standalone
@@ -328,45 +328,54 @@ possible misuses: some misuses are later detected in debug builds, but some
 misuses end up in release code, where they can become a significant security
 concern.
 
+\begin{figure}
+\begin{lstlisting}[language=C++,
+  caption={A simplified example of V8's C++ code, showing the use of handles.
+  \texttt{main} creates a handle scope (line 2), and then calls \texttt{foo}
+  which creates a further handle scope (line 7). Two new heap objects are
+  created, each of which produces a handle (lines 8 and 9), ensuring that both
+  objects are considered as roots. \texttt{foo} cannot directly return a handle
+  to its caller, as that handle will be automatically destroyed when the handle
+  scope is destroyed by RAII at the end of the function call. The
+  \texttt{CloseAndEscape} method adds a new handle to \texttt{main}'s handle
+  scope pointing to the \texttt{"a"} string, and passes a reference to that
+  handle to the caller, allowing the underlying object to safely `escape' the
+  handle scope it was created in.},
+  label=handles_example]
+void main() {
+  HandleScope scope(GetIsolate());
+  Handle<String> str = foo();
+}
 
+Handle<String> foo() {
+  HandleScope scope(GetIsolate());
+  Handle<String> a = NewString("a");
+  Handle<String> b = NewString("b");
+  return scope.CloseAndEscape(a);
+}
+\end{lstlisting}
+\end{figure}
 
-For performance reasons, handles are not created or destroyed individually.
-Instead, handle lifetimes are managed as part of a chain using \emph{handle
-scopes}.
-A handle scope can be thought of as a collection of many individual
-handles and is an object which exists on the stack.
-Before any reference to a heap object can be obtained from the stack, a handle
-scope must be created first which causes it to become the new active handle
-scope.
-When a reference to a JavaScript object is requested, a handle is created, and
-is automatically registered to the active handle scope.
-C++ lexical scoping and RAII is used to determine the active handle scope.
-At the end of a lexical scope in C++, the handle scope's destructor is run,
-which causes all the handles created within it to be invalidated along with it.
-Any objects which were only referenced by those handles will then be reclaimed
-during be next garbage collection.
+\cref{handles_example} shows a simplified snipped of V8's C++ code,
+demonstrating how handle scopes interact. In this example, two handle scopes
+are created, with the second handle scope wanting to return a handle that
+outlives its handle scope. Handle scopes expose a \texttt{CloseAndEscape}
+method which allow a handle to be safely moved to the parent handle scope.
 
-Though stack-allocated handle scopes manage the lifetimes of handles, they do
-not store the handles themselves.
-Instead, handles are dynamically allocated in
-\emph{handle blocks}.
-These contiguous blocks are linked together in a list-like structure that
-mirrors the handle scopes on the stack.
-When a new handle is created, it is automatically registered in the block which
-corresponds to the active handle scope.
-A handle will \emph{always} refer to a heap object via a pointer through the
-handle block.
-When a handle scope is destroyed, the corresponding handle block in memory is
-deleted.
-The handle blocks are reachable from the isolate, so during a collection, the GC
-is able to iterate over each block in order to build up the rootset.
+Handle scopes are an important performance optimisation, since destroying
+a handle scope causes its backing storage containing multiple handles
+to be destroyed in one go: neither individual deallocation nor any form
+of handle compaction is necessary.
 
-This scheme has two major downsides.
-Handles have an implicit performance cost: each heap object dereference requires
-two (nested) pointer dereferences, with inevitable consequences for code size,
-cache behaviour, and static optimisations.
-There is also a performance cost to creating and destroying handle blocks via
-the handle scope mechanism.
+\laurie{this next bit is me inferring from a half-forgotten conversation} A
+further optimisation is based on the observation that within a given handle
+scope it is common for the same object to be referenced multiple times.
+Although it is always correct to create multiple handles to the same object, it
+is inefficient, since each handle requires memory, requiring the storage area
+pointed to by a handle scope to be enlarged. When a handle for an object is
+requested, V8 thus searches the current handle scope to see if an existing
+handle to that object is present, only creating a new handle if none exists.
+\laurie{is this just a linear scan?}
 
 
 
@@ -388,31 +397,9 @@ the handle scope mechanism.
   \item Using a handle that has been invalidated (scopes has been closed and thus block removed) is undefined behavior and results in (likely) crashes in debug builds
 \end{itemize}
 
-% Minimal examples: https://gist.github.com/mlippautz/7c81854eeee27a8747cce88b922081d2
-\begin{figure}
-\begin{lstlisting}[language=C++]
-void main() {
-  HandleScope scope(GetIsolate());
-
-  Handle<String> str = foo();
-}
-
-Handle<String> foo() {
-  HandleScope scope(GetIsolate());
-
-  Handle<String> hello = NewString("hello");
-  Handle<String> world = NewString("world");
-
-  return scope.CloseAndEscape(hello);
-}
-\end{lstlisting}
-    \caption{\jake{TODO: inkscape diagram which goes alongside this showing
-    what happens in memory.}}
-\end{figure}
-
-
 \subsection{Blink as an API consumer}
 
+\laurie{i'm not sure this section is relevant to the paper?}
 Handles (and handle scopes) are internal V8 concepts which are not exposed in
 the external API. Instead the API bindings layer exposes locals — a separate
 class which mirrors a subset of the indirect handle API. Like indirect handles,
