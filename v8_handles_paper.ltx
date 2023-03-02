@@ -373,97 +373,134 @@ handle to that object is present, only creating a new handle if none exists.
 %   \item Using a handle that has been invalidated (scopes has been closed and thus block removed) is undefined behavior and results in (likely) crashes in debug builds
 % \end{itemize}
 
+
 \section{Gradually Migrating from Handles to Direct References}
 \label{sec:migration}
 
-Contrary to what one might expect when switching to direct heap references, we
-do not swap out \lstinline{Handle} objects for raw pointers. This is because
-almost all existing V8 code that operates on JavaScript heap objects does so via
-methods on \lstinline{Handle} objects. Instead, we introduced a new class,
-\lstinline{DirectHandle<T>}\footnote{This is somewhat of a misnomer as
-``direct'' and ``handle'' are inherently contradictory. However, this was chosen
-as a compromise as it differentiates them from existing handles while ensuring
-their use in the codebase is one V8 developers are familiar with.} which, unlike
-\lstinline{Handle<T>}, contains a direct reference to objects on the JavaScript
-heap. To make migration easier, \lstinline{DirectHandle} contains methods whose
-signatures mirror those found in \lstinline{Handle}. For many parts of V8, this
-means that direct references can be used in place of handles by changing the
-type name.
+Migrating from handles to direct references sounds like it should be easy, but
+on a codebase of V8's size and complexity turns out to be rather hard.
 
-Unfortunately, migrating from handles to direct references is it not as
-straightforward as performing a search and replace on \lstinline{Handle} types.
-There are parts of the V8 codebase which take shortcuts\jake{this might sound a
-bit negative.. i don't want to upset anyone} based on the assumption they are
-operating on handles and not direct references. One such example is a
-performance hack on Array Buffers and String Builders where a handle's
+
+\subsection{Migration Strategy}
+
+Simplifying slightly, our first migration attempt tried to move the codebase
+wholesale from handles to direct references --- after considerable effort this
+failed. This was due to a combination of factors but two are of particular
+note. First, many parts of V8 quite reasonably make use of implicit properties
+of handles that are not captured by the type system or API \laurie{can we give
+a simple example?}: these must be manually inspected and altered to work
+correctly with direct references. Second, when we inevitably hit bugs due to
+our changes, we found it impractical to work out which of our many changes
+caused a particular problem.
+
+This paper is the result of our second migration attempt. We used the
+experience from our first failed attempt to devise a scheme that allows us to
+gradually migrate small portions of V8 from handles to direct references.
+The migration is `hidden' behind a compile-time flag that is false by default,
+allowing us to upstream many of our changes without affecting mainstream
+users.
+
+The most obvious part of our gradual migration approach is to realise that
+handles and direct references must be able to co-exist for as long as the
+migration takes. We thus introduced a new C++ class which we will refer to in
+this paper as \lstinline{DirectRef}\footnote{The actual name of this class is
+the confusing, and contradictory, \lstinline{DirectHandle}. Our past selves
+have much to apologise for, but they are no longer around to do so.} which
+stores a direct reference to objects on the heap while exposing a
+\lstinline{Handle}-like API \laurie{are there any parts of the Handle API this
+doesn't expose or changes?}.
+
+In many cases, migrating from handles to direct references simply requires
+replacing \lstinline{Handle} with \lstinline{DirectRef}. However, many parts of
+V8 make assumptions about handles, normally for performance reasons, that are
+not encoded in the \lstinline{Handle} API.
+
+For example, array buffers and string builders are used extensively by
+JavaScript code. Implemented naively these would require \laurie{doing what
+with handles?}. To improve performance, a handle's
 intermediate value is modified in-place so that this propagates to other handles
 using this value. Although recent efforts in V8 to perform such tricks through a
-\lstinline{Handle<T>::PatchValue} bottleneck have made them easier to locate,
+\lstinline{Handle<T>::PatchValue} bottleneck have made them easier to locate
+\laurie{is every such location now a PatchValue or are some still using
+ye olde ways?},
 they can still require significant engineering effort to migrate.
 
-Another major challenge for migrating handles to use direct references in V8 is an
-optimisation that V8 uses to prevent boxing small integers (SMIs) in memory.
-\lstinline{Handle}s use a pointer tagging scheme to differentiate between a SMI
-- an integer which can be represented using 31 bits of memory - and a heap
-pointer. A handle's intermediate pointer (i.e. the pointer which is stored in
-the handle block) is tagged with a 0 if it is a heap pointer, or 1 if it is a
-SMI. However, a null handle is represented with a \lstinline{nullptr} value in
-the \lstinline{Handle}'s stack slot. This means when we fold this into a single
-level of indirection as would be required with \lstinline{DirectHandle}, we
-represent a null \lstinline{DirectHandle} with a tagged null value instead
-(\lstinline{0x1}). The consequence of this is that when converting between a
-\lstinline{Handle} or \lstinline{DirectHandle} in either direction, a branch is
-needed to check whether the value is null, and switch to the appropriate
-representation.
+Similarly, the parts of V8 that enable a transition from C++ code to
+JIT-compiled machine code and back are written in an assembly-like domain
+specific language \laurie{which is translated to C++ or ... ?}. This
+\laurie{code or the DSL translator?} does not refer to the \lstinline{Handle}
+class directly but generates code which implicitly follows handle conventions.
+They need to be carefully checked and edited by hand and cannot be done
+partially: i.e. anything calling into them must be either direct or handle, it
+can't be a mix and match.
 
-\jake{TODO write this para properly} Another challenge: There are macro
-assembler stubs, and turbo fan compiler bits which go from C++ runtime to JIT'd
-frames. These are not written in C++ but in DSLs that resembles assembly code.
-They don't refer to \lstinline{Handle<T>} classes directly but are written in a
-way that assumes indirection. They need to be carefully checked and edited by
-hand and cannot be done partially: i.e. anything calling into them must be
-either direct or handle, it can't be a mix and match.
+Another difficulty was balancing the long-term ergonomics of direct references
+with the temporary needs of handles. The chief problem is that the
+\lstinline{Handle} class's constructors need a reference to an isolate (to
+allocate the actual handle in), but the \lstinline{DirectRef} class's
+constructors do not. When moving from a migrated portion of code using
+\lstinline{DirectRef} to unmigrated code using \lstinline{Handle}, we thus do
+not know which isolate to create the new handle in. We could have required
+\lstinline{DirectRef} to store a reference to an isolate, but this would be
+awkward and muddy performance comparisons. Instead, we assume that a
+\lstinline{Handle} created from a \lstinline{DirectRef} lives in the current
+isolate. When this assumption is incorrect (for example, when the JIT compiler
+hands compilation off to another thread), we almost always get an immediate
+crash. Fixing such a crash can however be challenging, as it requires finding
+the right isolate to create a \lstinline{Handle} in.
 
-We chose four parts of V8 for our migration experiment: 1) the V8 embedder API
-layer (where V8 interacts with other applications, such as the Blink rendering
-engine in Chrome); 2) the interface between C++ code and V8's JIT compiled
-JavaScript runtime; 3) JavaScript object definitions and implementations; 4)
-intrinsics, builtins, and runtime functions. These parts of V8 were selected for
-two reasons: first, they are integral parts of V8 of considerable complexity, so
-successfully migrating them gives us confidence that direct references are a
-practical alternative; second, they are parts of V8 where handles have
-previously been identified as possible performance bottlenecks.
 
-\jake{flesh this out} So what did we do?
-\begin{itemize}
-    \item We wrote constructors for \lstinline{Handle} and
-        \lstinline{DirectHandle} which take eachother as arguments. This way
-        they can be implicitly converted between eachother. The constructors
-        perform the necessary null / SMI conversions. Because handles
-        construction takes an isolate as an argument (they need to be attached
-        to one), we use the current thread's isolate when one isn't explicitly
-        passed to a constructor. This is good enough in most cases, and will
-        immediately crash when the current thread doesn't have an isolate.
+\subsection{Performance Challenges}
 
-    \item The above approach typically breaks on anything that is done
-        on concurrent threads. Things like the JIT compiler fire handles off
-        onto other threads with a mini "isolate-lite" stub and are then joined
-        later. If you pass them a direct handle when they expect a handle,
-        they'll try and upcast it and crash (no isolate found). These must be
-        painstakingly given the correct isolate reference by hand.
+Our migration imposes two performance costs while migration is ongoing.
 
-    \item A lot of it was just changing stuff over to use DirectHandles instead
-        and then fixing breakages. This usually involved rewriting logic that
-        relied on indirection. Nothing particulary interesting, just software
-        engineering work and good old debugging.
+First, since migrated and unmigrated code frequently interact, moving from code
+which uses direct references to code using handles requires creating handles.
+Occasionally this can create significant bottlenecks where handles are
+continually created simply to interface with unmigrated code. This can lead to
+the surprising outcome that migrating a small portion of code can create a
+significant slowdown while migrating a tiny additional portion of code can
+increase performance. Since migration sometimes imposes handle creation costs
+on the callers of a function, we were often unsure which callers of a migrated
+function were causing performance problems. We eventually developed a simple
+`profiler' which pinpoints how often a line of source code creates handles,
+allowing us to quickly identify such locations.
 
-    \item We modified the JIT runtime assembly stubs to take direct references
-        instead of doing a double deref.
+Second, V8 uses \emph{tagged pointers} to avoid storing small integers as full
+objects on the heap. The tagging is done on the `pointer' from a handle to a
+heap object: if the top bit is set to 0, this is really a pointer; if the top
+bit is set to 1, it is a small integer. We the same pointer tagging scheme in
+\lstinline{DirectRef}. However, when converting from handles to direct
+references, we have to handle \emph{null handles} with care. Null handles are
+used in V8 e.g.~as place holders. To avoid allocating backing memory, the
+`nullness' is represented by a null pointer to the handle itself. In other
+words, a null \lstinline{Handle} instance itself contains a null pointer, but
+if a small integer is stored, the \lstinline{Handle} points to a handle whose
+tagged pointer has a top bit set to 1. This representation makes sense for
+\lstinline{Handle}, but we have to convert null handles to
+\lstinline{DirectRef} tagged pointers (whose value is simply zero). Converting
+from \lstinline{Handle}s to \lstinline{DirectRef}s thus requires an extra
+compare-and-branch to deal with null handles correctly: though the cost of this
+check is small, it will definitely have a cost in the general case.
 
-    \item For backwards compatibility with V8’s main branch,
-        \lstinline{DirectHandle}s are implemented behind a compiler flag, which,
-        when disabled they simply becomes an alias of \lstinline{Handle<T>}.
-\end{itemize}
+
+\subsection{What We Migrated}
+
+When deciding what parts of V8 to migrate, we wanted to choose those parts
+whose migration would give us greatest overall confidence in terms of
+correctness and performance. That meant that we chose some of the hardest parts
+to migrate, and those that are considered as the most likely performance
+bottlenecks. We thus migrated most of the following parts of V8:
+
+\begin{enumerate}
+  \item The V8 embedder API layer (where V8 interacts with other applications, such as the Blink rendering
+engine in Chrome).
+  \item The interface between C++ code and V8's JIT compiled
+JavaScript runtime.
+  \item JavaScript object definitions and implementations.
+  \item Intrinsics, builtins, and runtime functions.
+\end{enumerate}
+
 
 \subsection{Interfacing between the different pointer types}
 
