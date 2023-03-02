@@ -507,22 +507,25 @@ JavaScript runtime.
   \item Intrinsics, builtins, and runtime functions.
 \end{enumerate}
 
+
 \subsection{Conservative Stack Scanning}
 
-In order to support direct references, we needed to implement conservative stack
-scanning so that we can schedule garbage collection without missing roots.
-Fortunately Blink uses conservative stack scanning for its own GC, Oilpan. We
-were able to reuse much of Oilpan's code for walking the C stack. This contains
-platform specific assembly stubs for spilling registers during a stop-the-world
-pause. To test that a word on the stack is a potential pointer, we perform a
-series of increasingly more granular conditional checks. We first check if the
+Direct references require conservative stack scanning, so we needed to add
+a conservative stack scanner to V8. Rather than writing one fully from scratch,
+we were able to borrow some parts of the conservative stack scanner built into
+Blink's GC \emph{Oilpan}, specifically the platform specific assembly stubs for
+spilling registers during a stop-the-world pause.
+
+Our conservative stack scanner tests each word on the call stack to see
+whether it looks like a pointer into the heap. We use several steps, each
+more expensive than the last, such that we aim to finish as soon as possible
+when a word is not a pointer. We first check if the
 value points into a page in the heap; we then check if it points to an object in
-that page or empty space; finally, we obtain the base pointer to the object
-based on information we have in the isolate about the heap layout. Each of these
-checks are progressively more expensive, so obvious non-pointer values are
-quickly ruled out. This stack scanning is not yet production ready, so it is
-likely that there are optimisations that could be made to reduce the time spent
-stack scanning.
+that page or empty space; \laurie{this step seems redundant?}finally, we obtain the base pointer to the object
+based on information we have in the isolate about the heap layout. Our scanner
+is not yet production ready: compared to Oilpan's scanner, it is clear that
+it could be much more heavily optimised.
+
 
 \section{Evaluation}
 \label{sec:evaluation}
