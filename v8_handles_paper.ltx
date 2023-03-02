@@ -518,7 +518,9 @@ whether it looks like a pointer into the heap. We use several steps, each
 more expensive than the last, such that we aim to finish as soon as possible
 when a word is not a pointer. We first check if the
 value points into a page in the heap; we then check if it points to an object in
-that page or empty space; \laurie{this step seems redundant?}finally, we obtain the base pointer to the object
+that page or empty space; \laurie{this step seems redundant?} \jake{The first
+check is "does this pointer point within a page", then the second check is "ok,
+we're in the page, are we actually pointing to an object or free memory in that page"}finally, we obtain the base pointer to the object
 based on information we have in the isolate about the heap layout. Our scanner
 is not yet production ready: compared to Oilpan's scanner, it is clear that
 it could be much more heavily optimised.
