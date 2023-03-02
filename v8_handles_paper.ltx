@@ -137,13 +137,8 @@ Unfortunately, stackmaps are not yet widely available. GCC does not
 have any support for stackmaps. LLVM does have some stackmap support,
 but (as some of this paper's authors have discovered in other work), it
 is experimental, incomplete, and unsupported, with particular problems at
-higher optimisation levels. \jake{There is also the statepoint author's article
-on how the old conservative gc.root mechanism should be favoured for GC stuff in
-LLVM. Not sure if that's worth citing?} \laurie{remind me what that mechanism
-does: is it just stackmaps in disguise?} \jake{it's a way of escaping an alloca
-in LLVM to some GC pass that you write yourself (which could be stackmaps or
-some other mechanism).}
-
+higher optimisation levels. \jake{I don't think the gc root stuff is worth
+mentioning, but should we cite the statepoint docs?}
 In practise, therefore, VMs using direct references have to turn to
 \emph{conservative scanning}, where the C call stack is exhaustively examined for
 pointers to instances of \texttt{Obj}. In order for this to work, the GC must
@@ -303,9 +298,9 @@ terse, and reduces several opportunities for programmer mistakes. However, C++
 code must carefully ensure that it does not leak a direct pointer to an object
 beyond the lifetime of the handle scope that references that object --- doing
 so causes undefined behaviour. V8 has various `lints' to detect many such
-mistakes \laurie{can we give a small example?} \jake{of a bug that made it into
-release which was patched?} \laurie{basically can we give a quick 1 sentence
-summary of a lint?}, but they cannot capture all
+mistakes, one such example is \emph{gcmole}, a tool used to find uses of
+\lstinline{Handle} instances in the V8 codebase which may be unsafe for GC.
+However, they cannot capture all
 possible misuses: some misuses are later detected in debug builds, but some
 misuses end up in release code, where they can become a significant security
 concern.
@@ -388,7 +383,8 @@ wholesale from handles to direct references --- after considerable effort this
 failed. This was due to a combination of factors but two are of particular
 note. First, many parts of V8 quite reasonably make use of implicit properties
 of handles that are not captured by the type system or API \laurie{can we give
-a simple example?}: these must be manually inspected and altered to work
+a simple example?} \jake{we do this later with array buffers and string builders
+no?}: these must be manually inspected and altered to work
 correctly with direct references. Second, when we inevitably hit bugs due to
 our changes, we found it impractical to work out which of our many changes
 caused a particular problem.
@@ -569,7 +565,8 @@ references, with the GC running as normal (subject to the restrictions noted
 earlier). This implicitly includes the full costs of both handles (creating
 handles; destroying handles; an extra level of indirection) and direct
 references (conservative stack scanning). We disable heap
-compaction when a GC is scheduled while there are frames on the C++ stack \laurie{why?}.
+compaction when a GC is scheduled while there are frames on the C++ stack as it
+does not yet support conservative stack scanning.
 
 The second experiment we run aims to tease out the mutator performance of
 handles and direct references from the
@@ -588,7 +585,8 @@ user interactions in a browser. We used Crossbench to run \speedometer
 for 30 \emph{process executions}, where we close down the browser
 and start a new browser. Crossbench records the wall-clock time of each individual
 benchmark as well as the total time of the process execution \laurie{when does
-the clock start and stop for the process execution?}.
+the clock start and stop for the process execution?} \jake{i don't know.
+Hannes, any idea?}.
 
 
 We use Chrome version 112.0.55572 and V8 version 11.2.28. The benchmarks were
