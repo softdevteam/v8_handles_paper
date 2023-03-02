@@ -265,7 +265,8 @@ this paper exclusively on `normal' handles.
 Comprehensive handles as described in \cref{comprehensive_handles} persist
 throughout a VM's lifetime, with each heap object having a single handle
 pointing to it. In contrast, V8's partial handles are temporary, being
-regularly created and destroyed: any object may, over its lifetime, have
+regularly created and destroyed: any object may, both at any given point
+and over its lifetime, have
 multiple handles pointing to it. This has a significant impact on the way
 handles are used within V8.
 
@@ -278,16 +279,24 @@ using this style of partial handles, V8 faces two challenges: how to make
 partial handles ergonomic for the programmer; and how to make their regular
 creation and destruction fast.
 
-Since V8's C++ code uses partial handles extensively, the ergonomics of partial
-handles are vital, both for correctness and code readability. V8's basic
-mechanism to aid ergonomics is the \emph{handle scope} which stores handles.
-Any V8 code can create a new handle scope, which is pushed onto a stack: the
-most recently created handle scope is the `current' handle scope. C++'s RAII
-mechanism is used to automatically destroy handle scopes: destroying the handle
-scope also destroys all the handles created while that handle scope was active.
-All access to heap objects is via an API that returns a direct pointer to a
-heap object, while implicitly adding a handle to that object to the current
-handle scope.
+The C++ \lstinline{Handle} class is used pervasively throughout V8: most
+functions that operate on heap objects either take or return \lstinline{Handle}
+instances. The \lstinline{Handle} class exposes a pointer-like API (e.g.~the
+dereferencing `\texttt{*}' operator on a handle returns an \lstinline{Object})
+that makes it relatively transparent in use. A \lstinline{Handle} instance
+contains a pointer to the underlying object but no additional storage
+(i.e.~\lstinline{size_of(Handle<T>) == size_of(T*)}, giving programmers
+confidence about handle storage and moving costs.
+
+A challenge with partial handles is knowing when they are no longer needed. To
+help with this, V8 uses \emph{handle scopes}, which can be thought of as pools
+of handles: newly created handles are automatically placed in the `current'
+handle scope; and when a handle scope is no longer needed all of the handles in
+it are destroyed. When V8 code creates a new \lstinline{HandleScope} instance,
+that handle scope is pushed onto a stack, whose topmost element is the
+current handle scope. C++'s RAII
+mechanism is used to automatically destroy \lstinline{HandleScope} instances,
+which also destroys all the handles it contains.
 
 Handle scopes ensure that C++ code dealing with objects remains relatively
 terse, and reduces several opportunities for programmer mistakes. However, C++
@@ -329,8 +338,8 @@ Handle<String> foo() {
 \end{lstlisting}
 \end{figure}
 
-\cref{handles_example} shows a simplified snipped of V8's C++ code,
-demonstrating how handle scopes interact. In this example, two handle scopes
+\cref{handles_example} shows a simplified snippet of V8's C++ code,
+demonstrating how \lstinline{Handle}s and \lstinline{HandleScope}s interact. In this example, two handle scopes
 are created, with the second handle scope wanting to return a handle that
 outlives its handle scope. Handle scopes expose a \texttt{CloseAndEscape}
 method which allow a handle to be safely moved to the parent handle scope.
@@ -366,15 +375,6 @@ handle to that object is present, only creating a new handle if none exists.
 
 \section{Gradually Migrating from Handles to Direct References}
 \label{sec:migration}
-
-Handles in V8 are represented by the \lstinline{Handle<T>} class. This is used
-by V8 programmers as if it were a wrapper around a pointer into the heap. It has
-an API that allows it to be used as if it were a direct pointer (e.g.
-\lstinline{operator*} is overloaded to return \lstinline{Object<T>}).
-\lstinline{Handle} is a single pointer-sized machine word, and can be put in
-registers and on the C++ stack. Handles are used pervasively throughout the V8
-codebase, almost all functions which do something with objects on the heap will
-either take \lstinline{Handle}s as arguments, or return them.
 
 Contrary to what one might expect when switching to direct heap references, we
 do not swap out \lstinline{Handle} objects for raw pointers. This is because
