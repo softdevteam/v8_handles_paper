@@ -658,7 +658,10 @@ comparison across JavaScript VMs and browsers.
         compaction, and direct references without compaction. Perhaps we should?
         Though this would likely regress because the GC that exists today is not
         built with CSS in mind.} \laurie{when is a `stack' (C++ call stack?)
-        present vs.~not present?}
+        present vs.~not present?} \jake{A C++ stack is present when a GC
+        was scheduled because of an allocation failure. In other cases,
+        "idle-time" GC is used to schedule GC when the mutator isn't doing much,
+        or we're at a safepoint in the event loop.}
 
 
 
