@@ -604,6 +604,25 @@ benchmarking and did not observe any oddities such as the machine overheating.
 
 \subsection{Results}
 
+\makeatletter
+\newcommand*\ExpandableInput[1]{\@@input#1 }
+\makeatother
+
+ \begin{table*}[t]
+     \begin{tabular}{lll}
+ \toprule
+         Benchmark & Handles (ms) & Direct Refs (ms) \\
+ \midrule
+\ExpandableInput{./table_no_gc}
+ \bottomrule
+ \end{tabular}
+\caption{Results from our second experiment: teasing out the mutator
+   performance of handles and direct references without GC costs. We ran
+   \speedometer 30 times and report 99\% confidence intervals. This clearly
+   shows that, when GC is remove from the equation, direct references are
+   faster.}
+\end{table*}
+
 \laurie{not sure i understand this paragraph}
 89\% of garbage collections in Chrome are happening without a stack when we are on the message loop.
 Therefore making stack scanning conservative may not be an issue in practise.
@@ -652,24 +671,6 @@ comparison across JavaScript VMs and browsers.
         built with CSS in mind.} \laurie{when is a `stack' (C++ call stack?)
         present vs.~not present?}
 
-\makeatletter
-\newcommand*\ExpandableInput[1]{\@@input#1 }
-\makeatother
-
- \begin{table*}[t]
-     \begin{tabular}{lll}
- \toprule
-         Benchmark & Handles (ms) & Direct Refs (ms) \\
- \midrule
-\ExpandableInput{./table_no_gc}
- \bottomrule
- \end{tabular}
-\caption{Results from our second experiment: teasing out the mutator
-   performance of handles and direct references without GC costs. We ran
-   \speedometer 30 times and report 99\% confidence intervals. This clearly
-   shows that, when GC is remove from the equation, direct references are
-   faster.}
-\end{table*}
 
 
 \section{Related Work}
