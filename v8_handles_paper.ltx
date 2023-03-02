@@ -407,8 +407,8 @@ this paper as \lstinline{DirectRef}\footnote{The actual name of this class is
 the confusing, and contradictory, \lstinline{DirectHandle}. Our past selves
 have much to apologise for, but they are no longer around to do so.} which
 stores a direct reference to objects on the heap while exposing a
-\lstinline{Handle}-like API \laurie{are there any parts of the Handle API this
-doesn't expose or changes?}.
+\lstinline{Handle}-like API.  \laurie{are there any parts of the Handle API this
+doesn't expose or changes?}. \jake{No, the API surface is the same}
 
 In many cases, migrating from handles to direct references simply requires
 replacing \lstinline{Handle} with \lstinline{DirectRef}. However, many parts of
@@ -416,19 +416,21 @@ V8 make assumptions about handles, normally for performance reasons, that are
 not encoded in the \lstinline{Handle} API.
 
 For example, array buffers and string builders are used extensively by
-JavaScript code. Implemented naively these would require \laurie{doing what
-with handles?}. To improve performance, a handle's
+JavaScript code. Implemented naively these would require fresh handles to be
+used when they are resized or moved in memory. To improve performance, a handle's
 intermediate value is modified in-place so that this propagates to other handles
 using this value. Although recent efforts in V8 to perform such tricks through a
 \lstinline{Handle<T>::PatchValue} bottleneck have made them easier to locate
 \laurie{is every such location now a PatchValue or are some still using
-ye olde ways?},
+ye olde ways?} \jake{It's likely that more exist. It's very difficult to tell
+until you hit a problem with the way that handles are casted around and used as
+integer types},
 they can still require significant engineering effort to migrate.
 
 Similarly, the parts of V8 that enable a transition from C++ code to
-JIT-compiled machine code and back are written in an assembly-like domain
-specific language \laurie{which is translated to C++ or ... ?}. This
-\laurie{code or the DSL translator?} does not refer to the \lstinline{Handle}
+JIT-compiled machine code and back are written in a macro-assembler \laurie{which is translated to C++ or ... ?} \jake{this is
+translated into assembly stubs for various different architectures.} This
+assembler does not refer to the \lstinline{Handle}
 class directly but generates code which implicitly follows handle conventions.
 They need to be carefully checked and edited by hand and cannot be done
 partially: i.e. anything calling into them must be either direct or handle, it
@@ -447,7 +449,9 @@ awkward and muddy performance comparisons. Instead, we assume that a
 isolate. When this assumption is incorrect (for example, when the JIT compiler
 hands compilation off to another thread), we almost always get an immediate
 crash. Fixing such a crash can however be challenging, as it requires finding
-the right isolate to create a \lstinline{Handle} in.
+the right isolate to create a \lstinline{Handle} in \jake{I think it's more that
+this part is slow and tedious, as there are likely many places you need to
+change, rather than it being difficult work}.
 
 
 \subsection{Performance Challenges}
@@ -469,17 +473,17 @@ allowing us to quickly identify such locations.
 
 Second, V8 uses \emph{tagged pointers} to avoid storing small integers as full
 objects on the heap. The tagging is done on the `pointer' from a handle to a
-heap object: if the top bit is set to 0, this is really a pointer; if the top
-bit is set to 1, it is a small integer. We the same pointer tagging scheme in
+heap object: if the top bit is set to 1, this is really a pointer; if the top
+bit is set to 0, it is a small integer. We use the same pointer tagging scheme in
 \lstinline{DirectRef}. However, when converting from handles to direct
 references, we have to handle \emph{null handles} with care. Null handles are
 used in V8 e.g.~as place holders. To avoid allocating backing memory, the
 `nullness' is represented by a null pointer to the handle itself. In other
 words, a null \lstinline{Handle} instance itself contains a null pointer, but
 if a small integer is stored, the \lstinline{Handle} points to a handle whose
-tagged pointer has a top bit set to 1. This representation makes sense for
+tagged pointer has a top bit set to 0. This representation makes sense for
 \lstinline{Handle}, but we have to convert null handles to
-\lstinline{DirectRef} tagged pointers (whose value is simply zero). Converting
+\lstinline{DirectRef} tagged pointers (whose value is simply one). Converting
 from \lstinline{Handle}s to \lstinline{DirectRef}s thus requires an extra
 compare-and-branch to deal with null handles correctly: though the cost of this
 check is small, it will definitely have a cost in the general case.
@@ -501,22 +505,6 @@ JavaScript runtime.
   \item JavaScript object definitions and implementations.
   \item Intrinsics, builtins, and runtime functions.
 \end{enumerate}
-
-
-\subsection{Interfacing between the different pointer types}
-
-% PatchValue and implicit code that assumes handle.
-
-% In many parts of V8, migrating from indirect to direct handles requires
-% rewriting function signatures to instead use DirectHandle. This has a tendency
-% to cause changes to ripple up the call graph, so  DirectHandle has a
-% constructor which can take a Handle as an argument so that indirect handles
-% can be implicitly converted where possible.
-
-
-
-\subsection{Direct object pointers}
-
 
 \subsection{Conservative Stack Scanning}
 
