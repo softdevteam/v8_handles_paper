@@ -390,6 +390,40 @@ signatures mirror those found in \lstinline{Handle}. For many parts of V8, this
 means that direct references can be used in place of handles by changing the
 type name.
 
+Unfortunately, migrating from handles to direct references is it not as
+straightforward as performing a search and replace on \lstinline{Handle} types.
+There are parts of the V8 codebase which take shortcuts\jake{this might sound a
+bit negative.. i don't want to upset anyone} based on the assumption they are
+operating on handles and not direct references. One such example is a
+performance hack on Array Buffers and String Builders where a handle's
+intermediate value is modified in-place so that this propagates to other handles
+using this value. Although recent efforts in V8 to perform such tricks through a
+\lstinline{Handle<T>::PatchValue} bottleneck have made them easier to locate,
+they can still require significant engineering effort to migrate.
+
+Another major challenge for migrating handles to use direct references in V8 is an
+optimisation that V8 uses to prevent boxing small integers (SMIs) in memory.
+\lstinline{Handle}s use a pointer tagging scheme to differentiate between a SMI
+- an integer which can be represented using 31 bits of memory - and a heap
+pointer. A handle's intermediate pointer (i.e. the pointer which is stored in
+the handle block) is tagged with a 0 if it is a heap pointer, or 1 if it is a
+SMI. However, a null handle is represented with a \lstinline{nullptr} value in
+the \lstinline{Handle}'s stack slot. This means when we fold this into a single
+level of indirection as would be required with \lstinline{DirectHandle}, we
+represent a null \lstinline{DirectHandle} with a tagged null value instead
+(\lstinline{0x1}). The consequence of this is that when converting between a
+\lstinline{Handle} or \lstinline{DirectHandle} in either direction, a branch is
+needed to check whether the value is null, and switch to the appropriate
+representation.
+
+\jake{TODO write this para properly} Another challenge: There are macro
+assembler stubs, and turbo fan compiler bits which go from C++ runtime to JIT'd
+frames. These are not written in C++ but in DSLs that resembles assembly code.
+They don't refer to \lstinline{Handle<T>} classes directly but are written in a
+way that assumes indirection. They need to be carefully checked and edited by
+hand and cannot be done partially: i.e. anything calling into them must be
+either direct or handle, it can't be a mix and match.
+
 We chose four parts of V8 for our migration experiment: 1) the V8 embedder API
 layer (where V8 interacts with other applications, such as the Blink rendering
 engine in Chrome); 2) the interface between C++ code and V8's JIT compiled
@@ -400,15 +434,51 @@ successfully migrating them gives us confidence that direct references are a
 practical alternative; second, they are parts of V8 where handles have
 previously been identified as possible performance bottlenecks.
 
+\jake{flesh this out} So what did we do?
+\begin{itemize}
+    \item We wrote constructors for \lstinline{Handle} and
+        \lstinline{DirectHandle} which take eachother as arguments. This way
+        they can be implicitly converted between eachother. The constructors
+        perform the necessary null / SMI conversions. Because handles
+        construction takes an isolate as an argument (they need to be attached
+        to one), we use the current thread's isolate when one isn't explicitly
+        passed to a constructor. This is good enough in most cases, and will
+        immediately crash when the current thread doesn't have an isolate.
+
+    \item The above approach typically breaks on anything that is done
+        on concurrent threads. Things like the JIT compiler fire handles off
+        onto other threads with a mini "isolate-lite" stub and are then joined
+        later. If you pass them a direct handle when they expect a handle,
+        they'll try and upcast it and crash (no isolate found). These must be
+        painstakingly given the correct isolate reference by hand.
+
+    \item A lot of it was just changing stuff over to use DirectHandles instead
+        and then fixing breakages. This usually involved rewriting logic that
+        relied on indirection. Nothing particulary interesting, just software
+        engineering work and good old debugging.
+
+    \item We modified the JIT runtime assembly stubs to take direct references
+        instead of doing a double deref.
+
+    \item For backwards compatibility with V8’s main branch,
+        \lstinline{DirectHandle}s are implemented behind a compiler flag, which,
+        when disabled they simply becomes an alias of \lstinline{Handle<T>}.
+\end{itemize}
+
+\subsection{Interfacing between the different pointer types}
+
+% PatchValue and implicit code that assumes handle.
+
+% In many parts of V8, migrating from indirect to direct handles requires
+% rewriting function signatures to instead use DirectHandle. This has a tendency
+% to cause changes to ripple up the call graph, so  DirectHandle has a
+% constructor which can take a Handle as an argument so that indirect handles
+% can be implicitly converted where possible.
+
+
+
 \subsection{Direct object pointers}
 
-V8 makes use of indirect handles to store Small Integer Objects (SMIs), that is
-JavaScript integers that are not boxed on the heap. An important case is the SMI
-0 and the null pointer: V8 encodes them in a way that allows them to be
-efficiently differentiated. Indirect handles that have an internal value of NULL
-represent a null pointer (and thus cannot be dereferenced to a handle block
-member). Handle block members with an interior value whose least significant bit
-is 0 encode a SMI; if the same bit is 1 a pointer is encoded.
 
 \subsection{Conservative Stack Scanning}
 
@@ -526,6 +596,8 @@ Maybe add browsing benchmark numbers to confirm impact\hannes{discuss with the t
         compaction, and direct references without compaction. Perhaps we should?
         Though this would likely regress because the GC that exists today is not
         built with CSS in mind.
+    \item The partial migration means that every time we go from a direct
+        reference to a handle, we must introduce a null check.
 \end{itemize}
 
 \makeatletter
