@@ -422,16 +422,18 @@ using this value. V8 has gradually moved most such places to use the
 \lstinline{Handle<T>::PatchValue} API, which makes it easy to identify
 those places where we have to be careful. However, there are no guarantees
 that all such places use \lstinline{PatchValue} \laurie{did we come across
-places that didn't use PatchValues?}.
+places that didn't use PatchValues?} \jake{Yes, this was done in parallel to our
+work. Unfortunately both ended up discovering almost all of them
+independently}.
 
 Similarly, the parts of V8 that enable a transition from C++ code to
 JIT-compiled machine code and back are written in a macro-assembler
 which is translated into each platform's assembly format. The
 macro-assembler does not refer to the \lstinline{Handle}
 class directly but generates code which implicitly follows handle conventions.
-They \laurie{the macro assembler or the macro assembly code or both?} need to be carefully checked and edited by hand and cannot be done
-partially: i.e. anything calling into them must be either direct or handle, it
-can't be a mix and match.
+The macro assembly codes need to be carefully checked and edited by hand and
+cannot be done partially: i.e. anything calling into them must be either direct
+or handle, it can't be a mix and match.
 
 Another difficulty was balancing the long-term ergonomics of direct references
 with the temporary needs of handles. The chief problem is that the
