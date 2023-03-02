@@ -284,7 +284,7 @@ functions that operate on heap objects either take or return \lstinline{Handle}
 instances. The \lstinline{Handle} class exposes a pointer-like API (e.g.~the
 dereferencing `\texttt{*}' operator on a handle returns an \lstinline{Object})
 that makes it relatively transparent in use. A \lstinline{Handle} instance
-contains a pointer to the underlying object but no additional storage
+contains a pointer to the underlying handle but no additional storage
 (i.e.~\lstinline{size_of(Handle<T>) == size_of(T*)}, giving programmers
 confidence about handle storage and moving costs.
 
