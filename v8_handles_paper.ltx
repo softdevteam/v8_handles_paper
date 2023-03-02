@@ -389,9 +389,7 @@ Simplifying slightly, our first migration attempt tried to move the codebase
 wholesale from handles to direct references --- after considerable effort this
 failed. This was due to a combination of factors but two are of particular
 note. First, many parts of V8 quite reasonably make use of implicit properties
-of handles that are not captured by the type system or API \laurie{can we give
-a simple example?} \jake{we do this later with array buffers and string builders
-no?}: these must be manually inspected and altered to work
+of handles that are not captured by the type system or API: these must be manually inspected and altered to work
 correctly with direct references. Second, when we inevitably hit bugs due to
 our changes, we found it impractical to work out which of our many changes
 caused a particular problem.
