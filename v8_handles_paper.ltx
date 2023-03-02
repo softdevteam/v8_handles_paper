@@ -514,14 +514,11 @@ Blink's GC \emph{Oilpan}, specifically the platform specific assembly stubs for
 spilling registers during a stop-the-world pause.
 
 Our conservative stack scanner tests each word on the call stack to see
-whether it looks like a pointer into the heap. We use several steps, each
-more expensive than the last, such that we aim to finish as soon as possible
-when a word is not a pointer. We first check if the
-value points into a page in the heap; we then check if it points to an object in
-that page or empty space; \laurie{this step seems redundant?} \jake{The first
-check is "does this pointer point within a page", then the second check is "ok,
-we're in the page, are we actually pointing to an object or free memory in that page"}finally, we obtain the base pointer to the object
-based on information we have in the isolate about the heap layout. Our scanner
+whether it's value looks like a pointer to a heap object. We first check if the
+value points into a page in the heap; if it doesn't, we can quickly move on.
+If the value does point into a page in the heap, we then check if it points to
+an object or empty space. If the value does point to an object, we then query
+the isolate's heap layout to find out the object's base pointer. Our scanner
 is not yet production ready: compared to Oilpan's scanner, it is clear that
 it could be much more heavily optimised.
 
