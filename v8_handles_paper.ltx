@@ -631,17 +631,18 @@ of direct references performance.
 
 JavaScript VMs such as V8 are somewhat unusual amongst modern VMs in two
 respects: JavaScript is single-threaded; and it is based around an event loop
-which naturally gives frequent pauses \laurie{based on the monitor frame rate?}
-where GC can occur without affecting execution. These two factors may have a
+which naturally gives frequent opportunities to perform garbage collection
+without pointers existing on the C stack. These two factors may have a
 notable impact on our understand of the performance merits of direct references
 and handles. We would have to migrate at least one non-JavaScript VM
 (e.g.~HotSpot) to understand whether these are significant factors or not.
 
 There are two differences between the configurations of Chrome/V8 we run and
 those run by normal users. First, we had to disable V8's young generation,
-because he sticky mark bit \laurie{huh?} is not yet implemented \laurie{can we
-give a hint as to why?}. Second, we do not have the ability to generate or use
-the profile-guided-optimisation data that production builds have access to.
+because it does not support pinning immovable objects which were located by
+conservative stack scanning. \jake{talk to V8 about non-moving YG}. Second, we
+do not have the ability to generate or use the profile-guided-optimisation data
+that production builds have access to.
 At best, these two factors mean that our Chrome/V8 builds will be slower than
 their production cousins; at worst, it could be that this changes the relative
 performance of handles and direct references.
