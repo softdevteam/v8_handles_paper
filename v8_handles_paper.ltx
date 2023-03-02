@@ -164,14 +164,13 @@ conservatively. Semi-conservative GCs must temporarily pin those objects
 identified as live by conservative scanning, because they cannot know whether
 such references can be safely rewritten or not.
 
-Conservative scanning also occupies an odd position in software: technically speaking, the
+Conservative scanning also occupies an odd position in software. Technically speaking, the
 way it works violates the rules of most languages, most compilers, and most
-operating systems.
-In addition, programming techniques which rely on obfuscating pointers
-(e.g.~using XOR lists) must be avoided, as they can hide roots from the GC.
+operating systems. Furthermore, some programming techniques
+(e.g.~XOR lists) thoroughly defeat it.
 However, because conservative scanning is widely used (e.g.~the well-known
-Boehm-Demers-Weiser GC~\cite{boehm88garbage} and WebKit~\cite{pizlo17riptide})
-any software that breaks it tends to be rapidly fixed~\cite{chromium20cssbug}.
+Boehm-Demers-Weiser GC~\cite{boehm88garbage} and WebKit~\cite{pizlo17riptide}),
+it is well supported in practise.
 
 
 \subsection{Handles}
