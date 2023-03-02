@@ -352,6 +352,14 @@ pointed to by a handle scope to be enlarged. When a handle for an object is
 requested, V8 thus performs a linear scan through the current handle scope to see if an existing
 handle to that object is present, only creating a new handle if none exists.
 
+Although in most of this paper we consider V8 in isolation, we are particularly
+interested in how our changes affect V8 when running browser code. That means
+that we also need to consider the interactions between V8 and \emph{Blink},
+Chrome's rendering engine. V8 exposes a simplified \lstinline{Handle}-like
+class called \lstinline{Local}, which also uses two levels of indirection, to
+`external' applications such as Blink. Moving objects between Blink and V8
+requires converting to/from \lstinline{Handle}s/\lstinline{Local}s.
+
 % dump
 % \begin{itemize}
 %   \item There's many different kind of handles in V8. They have two purposes: (a) allow the GC to find those object references and (b) allow the GC to relocate objects.
