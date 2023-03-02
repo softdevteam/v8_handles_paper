@@ -666,16 +666,12 @@ programs. However, its ubiquity does mean that its strengths and weaknesses as
 a benchmark suite are widely acknowledged, and it allows a good degree of
 comparison across JavaScript VMs and browsers.
 
-\jake{CSS prevents moving, so we must disable compaction when there is a
-        stack. However, we don't do a comparison between handles with
-        compaction, and direct references without compaction. Perhaps we should?
-        Though this would likely regress because the GC that exists today is not
-        built with CSS in mind.} \laurie{when is a `stack' (C++ call stack?)
-        present vs.~not present?} \jake{A C++ stack is present when a GC
-        was scheduled because of an allocation failure. In other cases,
-        "idle-time" GC is used to schedule GC when the mutator isn't doing much,
-        or we're at a safepoint in the event loop.}
-
+Objects identified via conservative stack scanning cannot be moved. However,
+at the moment we haven't implemented per-object pinning \laurie{i guess?},
+so we are forced to prevent heap compaction whenever GC occurs and there
+might be pointers on the stack. This is not as onerous as it would be in
+most VMs, as most GC cycles occur in the JavaScript event loop's pause
+time, when there can be, by design, no pointers on the call stack.
 
 
 \section{Related Work}
