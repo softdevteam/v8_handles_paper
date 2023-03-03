@@ -365,8 +365,9 @@ that we also need to consider the interactions between V8 and \emph{Blink},
 Chrome's rendering engine. V8 exposes a simplified \lstinline{Handle}-like
 class called \lstinline{Local}, which also uses two levels of indirection, to
 `external' applications such as Blink. Moving objects between Blink and V8
-requires converting to/from \lstinline{Handle}s/\lstinline{Local}s.
-\michael{... which in the default configuration merely reinterprets memory}
+requires converting to/from \lstinline{Handle}s/\lstinline{Local}s,
+though the default configuration optimises these conversions to be
+a compile-time cast (i.e.~there is no run-time copying of data).
 
 % dump
 % \begin{itemize}
