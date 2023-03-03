@@ -599,7 +599,6 @@ benchmark as well as the total time of the process execution \laurie{when does
 the clock start and stop for the process execution?} \jake{i don't know.
 Hannes, any idea?}.
 
-
 We use Chrome version 112.0.55572 and V8 version 11.2.28. The benchmarks were
 run on a Xeon E3-1240v6 3.7GHz CPU cores, with 32GB of RAM, and running Debian 8.
 We disabled turbo boost and hyper-threading in the BIOS and set Linux's CPU
@@ -609,16 +608,18 @@ benchmarking and did not observe any oddities such as the machine overheating.
 
 \subsection{Results}
 
-\cref{table:nocompact} shows the result of our first experiment. We achieve
-a total speedup of \nocompacttotalpdiff\% when using direct references over
+\cref{table:nocompact} shows the results from our first experiment,
+which is a straightforward comparison of V8 before and after our migration. We achieve
+a total speedup of \nocompacttotalpdiff\% \laurie{i believe there is no statistical difference between handles and direct refs in this table: their confidence intervals overlap AFAICS?} when using direct references over
 handles. \jake{It's quite hard to see where the costs of this are in the perf
 data. I think it's likely coming from stack scanning costs, but I can't be
 certain. I might be doing something silly or looking at the diff incorrectly.}
 
-Our second experiment (\cref{table:min}) highlights more clearly the
-effects that switching from handles to direct references has on mutator
-performance. We achieve a total speedup of \mintotalpdiff\% when using direct
-references over handles. To make sense of these results, we first looked at
+\cref{table:min} shows the results from our second experiment, where we
+try to take the costs of collection out of the comparison. Direct references
+are \mintotalpdiff\% \laurie{it's better to put the `\%` in the macro
+definition to avoid the space appearing here} faster than handles.
+To make sense of these results, we first looked at
 linux-perf data from a single run of the \jquery story, which was \minjquerypdiff\% faster
 when using direct references over handles. The \jquery story stresses interactions between
 the DOM heap on the renderer side (Blink) and V8's JavaScript heap. We saw
