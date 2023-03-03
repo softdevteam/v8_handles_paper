@@ -205,7 +205,7 @@ tag count by one. For example:
 \begin{lstlisting}[language=C]
 Handle *h = gc_new_obj();
 Obj *o = tag(h);
-n.data = 1;
+o.data = 1;
 untag(h);
 \end{lstlisting}
 
