@@ -821,16 +821,6 @@ for C/C++ code, using stackmaps for JIT compiled code, WebKit uses conservative 
 both C/C++ code and JIT compiled code, marginally increasing the chances of
 `accidental' object marking.
 
-\laurie{is there anything novel about this paper w.r.t. handles? if it's just
-that it uses handles to allow moving, that seems the same as all the earlier
-handle-using systems?}
-Compact-fit\cite{craciunas08compacting} is a compacting allocator which uses handles to allow objects to
-move. It consists of two conceptual memory layers: the \textit{abstract address
-space}; and the \textit{concrete address space}. Direct pointers to objects
-allocated in the concrete address space are not possible. The application
-operates on pointers to the abstract address space which are managed by handles.
-Object headers have back-pointers to their canonical handle.
-
 %TODO: Managed language collectors:
 % - Fast CSS: https://users.cecs.anu.edu.au/~steveb/pubs/papers/consrc-oopsla-2014.pdf
 % - Hybrid CSS: https://www.usenix.org/legacy/events/jvm01/full_papers/barabash/barabash.pdf
