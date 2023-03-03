@@ -39,6 +39,11 @@ crates handles lazily, destroys them when it doesn't need them, and tries to
 use direct references whenever it can. in contrast `comprehensive handles'
 would never use direct references. do spidermonkey and v8 use partial or
 comprehensive handles?}
+\michael{V8: Partial handles.
+Internal runtime calls try to use direct references where no GC finalization is possible.
+Any call that can trigger GC must use handles.
+Most API calls can trigger GC, which results in handles on all API calls for simplicity.
+}
 \label{comprehensive_handles}
 In this paper, we consider this long-standing implementation and design trade-off
 in the context of programming language Virtual Machines (VMs). Some VMs
