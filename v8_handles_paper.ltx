@@ -606,24 +606,23 @@ benchmarking and did not observe any oddities such as the machine overheating.
 
 \cref{table:nocompact} shows the results from our first experiment,
 which is a straightforward comparison of V8 before and after our migration. We achieve
-a total speedup of \nocompacttotalpdiff\% \laurie{i believe there is no statistical difference between handles and direct refs in this table: their confidence intervals overlap AFAICS?} when using direct references over
+a total speedup of \nocompacttotalpdiff \laurie{i believe there is no statistical difference between handles and direct refs in this table: their confidence intervals overlap AFAICS?} when using direct references over
 handles. \jake{It's quite hard to see where the costs of this are in the perf
 data. I think it's likely coming from stack scanning costs, but I can't be
 certain. I might be doing something silly or looking at the diff incorrectly.}
 
 \cref{table:min} shows the results from our second experiment, where we
 try to take the costs of collection out of the comparison. Direct references
-are \mintotalpdiff\% \laurie{it's better to put the `\%` in the macro
-definition to avoid the space appearing here} faster than handles.
+are \mintotalpdiff faster than handles.
 To make sense of these results, we first looked at
-linux-perf data from a single run of the \jquery story, which was \minjquerypdiff\% faster
+linux-perf data from a single run of the \jquery story, which was \minjquerypdiff faster
 when using direct references over handles. The \jquery story stresses interactions between
 the DOM heap on the renderer side (Blink) and V8's JavaScript heap. We saw
 approximately a 15\% speedup on most functions across the the embedder API layer,
 a part of V8 where we performed a near total migration (Section \ref{migrated}).
 
 The \emberjsdebug story was the worst performing benchmark in
-\cref{table:min}, with direct references on average \minemberjsdebugpdiff\%
+\cref{table:min}, with direct references on average \minemberjsdebugpdiff
 slower. Though this is within the margin of error, the perf data shows clear
 performance regressions on the functions which deal with the following parts of
 V8: entry to parts of the JIT compiler; a section of the inline cache; and
