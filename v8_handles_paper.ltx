@@ -569,7 +569,7 @@ collector, and work to move this to a non-moving generational GC has not yet
 been carried out. Fortunately, and despite these restrictions, our experiment
 is able to provide valuable insights.
 
-The first experiment we run is a straightforward comparison between handles and direct
+Our first experiment is a straightforward comparison between handles and direct
 references, with the GC running as normal (subject to the restrictions noted
 earlier). This implicitly includes the full costs of both handles (creating
 handles; destroying handles; an extra level of indirection) and direct
@@ -577,15 +577,17 @@ references (conservative stack scanning). We disable heap
 compaction when a GC is scheduled while there are frames on the C++ stack as it
 does not yet support conservative stack scanning.
 
-The second experiment we run aims to tease out the mutator performance of
-handles and direct references from the
-GC costs \laurie{i understand this means we (mostly) don't pay stack scanning
-costs with direct references, but what does it mean for handles?}. While we
-would ideally prevent the GC from running entirely in this experiment, we
-cannot run our benchmark suite without filling V8's heap, which has a 4GiB
-maximum size. We therefore prevented the GC from running until the heap reached
-this maximum limit: on our benchmark suite, this corresponds to a single
-collection per iteration.
+Our second experiment aims to tease out the mutator performance of handles and
+direct references from the costs of running the collector -- in other words,
+what are the costs of creating handles \laurie{when a handle scope is
+destroyed, is that memory reclaimed by the GC or normal malloc/free?} and
+having two levels of indirection? Ideally we would turn the collector off
+entirely, but that causes V8's heap (which has a 4GiB maximum size) to
+overflow. Instead, we altered V8 to prevent it from running `intermediate'
+collections, instead waiting until the heap is completely full to run a
+collection: in other words, we accept higher overall throughput at the expense
+of occasional latency. For our benchmark suite, this corresponds to a single
+collection per process execution.
 
 We evaluate each browser variant on the well known \speedometer browser benchmark
 suite~\cite{speedometer} using Chrome's Crossbench benchmark runner. \speedometer
