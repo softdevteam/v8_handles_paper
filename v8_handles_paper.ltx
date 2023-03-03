@@ -9,11 +9,15 @@ wrappers around pointers to heap objects, to allow the root set of GCed
 (Garbage Collected) objects to be precisely enumerated. Other VMs use
 \emph{direct references} to heap objects, requiring the C/C++ call stack to
 be conservatively scanned for values that appear to be pointers to heap
-objects. In this paper we study the performance difference
+objects. The performance trade-offs of these two approaches are unclear:
+in particular, do direct references gain more performance by removing
+a level of indirection than they pay through conservative stack scanning?
+In this paper we study the performance difference
 between these two approaches by migrating around half of V8 from handles to
 pointers: we show that, even though our partial migration imposes
 additional costs and our conservative stack scanner is naive, direct
-references are at least as fast as handles.
+references are at least as fast as handles on the \speedometer benchmark
+suite.
 \end{abstract}
 
 
