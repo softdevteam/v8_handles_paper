@@ -602,8 +602,9 @@ collection per process execution.
 
 We evaluate each browser variant on the well known \speedometer browser benchmark
 suite~\cite{speedometer} using Chrome's Crossbench benchmark runner. \speedometer
-consists of 16 benchmarks (or `stories'), each of which simulates common
-user interactions in a browser. We used Crossbench to run \speedometer
+consists of 16 widely used JavaScript web frameworks all modeling the same TodoMVC application.
+The benchmark executes various performance critical pieces of a JavaScript VM and the web rendering engine overall, and is therefore considered as one of the most relevant workloads for web browser engine optimizations. %Maybe cite blog posts proving its relevance.
+We used Crossbench to run \speedometer
 for 30 \emph{process executions}, where we close down the browser
 and start a new browser. Crossbench records the wall-clock time of each individual
 benchmark as well as the total time of the process execution \laurie{when does
