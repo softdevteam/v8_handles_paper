@@ -63,7 +63,7 @@ In this paper we examine the widely used JavaScript VM V8, which has
 been designed from its inception to use handles. Our hypothesis is
 that moving from handles to direct references (and thus also conservative scanning) will improve V8's performance.
 However, moving wholesale from handles to direct references is impractical on a
-codebase of V8's size (~1.75m lines of code) \jake{does this include torque files?}.
+codebase of V8's size (~1.75m lines of code).
 Our first challenge was thus
 to find a practical means for gradually migrating parts of V8 from handles to
 direct references (Section~\ref{sec:migration}). Having then migrated a
@@ -613,8 +613,13 @@ We used Crossbench to run \speedometer
 for 30 \emph{process executions}, where we close down the browser
 and start a new browser. Crossbench records the wall-clock time of each individual
 benchmark as well as the total time of the process execution \laurie{when does
-the clock start and stop for the process execution?} \jake{i don't know.
-Hannes, any idea?}. We report 99\% confidence intervals for each benchmark.
+the clock start and stop for the process execution?} \jake{It's actually
+speedometer itself that captures the timings. It records each
+individual story's time from within its in-JS benchmark runner, it uses performance.now()
+(https://developer.mozilla.org/en-US/docs/Web/API/Performance/now). I verified
+this myself from the source:
+\lstinline{https://github.com/WebKit/Speedometer/blob/24b094d1cc620be0fecb04e31863dba851fa900e/resources/benchmark-runner.mjs#L231} It then sums them together to
+get the total time.}. We report 99\% confidence intervals for each benchmark.
 
 We use Chrome version 112.0.55572 and V8 version 11.2.28. The benchmarks were
 run on a Xeon E3-1240v6 3.7GHz CPU cores, with 32GB of RAM, and running Debian 8.
@@ -654,14 +659,12 @@ approximately 15\% faster in these parts of the embedder API.
 The \emberjsdebug benchmark (where direct references are statistically
 indisguishable from handles in~\cref{table:min}) puts stress on: entry to parts
 of the JIT compiler; a section of the inline cache; and JavaScript debug
-objects. Not only have we not yet migrated any \laurie{do we really mean `none
-at all' or just `not very much'?} of these parts of V8, but each part interacts
-frequently with parts of V8 we have migrated: in other words, we pay frequent
-conversion costs to/from handles due to the partial migration. \laurie{not sure
-what this means ``In particular, the execution engine (responsible for making
-JS function calls) and getters and setters on JavaScript objects themselves.''}
-\laurie{can we give a \% figure in the same way we did for \jquery?}
-
+objects. Other than small parts of the inline cache, none of these sections of
+V8 have been converted to use direct references. However, each of them interact frequently with parts of V8 we have migrated: in other
+words, we pay frequent conversion costs to/from handles due to the partial
+migration. Our profiling data shows a ~30\% slow down in parts of the execution
+engine (responsible for invoking JS functions) which interact with non-migrated
+code.
 
 \makeatletter
 \newcommand*\ExpandableInput[1]{\@@input#1 }
@@ -742,17 +745,13 @@ and VMs, though quantitative comparisons are few in number. Generalising
 somewhat, one technique or the other has tended to hold sway either at
 different points in time, or within different communities.
 
-Early Smalltalk VMs used handles, which they called \emph{object tables}. Though the reasons for this are not made it
-explicit, they used a compacting GC, so it is reasonable to assume this was
-the motivation~\cite[p.~18]{krasner83smalltalk}. Handles are also used in VMs that descend from that tradition (e.g.~Self,
-HotSpot, Dart). \laurie{not sure if the rest of this is useful} HotSpot -- the now \emph{de facto}
-standard JVM -- uses handles for C++ code \laurie{cite at least the glossary}.
-Separately, HotSpot also uses a different kind of handles in the Java Native
-Interface (JNI), its foreign function interface. Java objects are added to a
-table of registered objects and accessed through a level of indirection when
-used externally. The collector treats this table as an additional set of roots.
-\laurie{i would not be surprised if the JNI handles are the same as the C++
-handles}
+Early Smalltalk VMs used handles, which they called \emph{object tables}. Though
+the reasons for this are not made it explicit, they used a compacting GC, so it
+is reasonable to assume this was the
+motivation~\cite[p.~18]{krasner83smalltalk}. Handles are also used in VMs that
+descend from that tradition (e.g.~Self\jake{I can't find a source for this, even
+though it's Lars Bak. There's also nothing immediately obvious in the source
+code}, HotSpot~\cite{hotspot07handles}, Dart~\cite{egorovdart}).
 
 To the best of our knowledge, the most comprehensive study of handles
 is~\cite{kalibera11handles} which evaluates different styles of handles in the
