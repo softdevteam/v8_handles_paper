@@ -5,8 +5,8 @@
 
 \begin{abstract}
 Some programming language Virtual Machines (VMs) use \emph{handles}, that is
-wrappers around pointers to heap objects, to allow the root set of GCed
-(Garbage Collected) objects to be precisely enumerated. Other VMs use
+wrappers around pointers to heap objects, to allow the root set of
+garbage collected objects to be precisely enumerated. Other VMs use
 \emph{direct references} to heap objects, requiring the C/C++ call stack to
 be conservatively scanned for values that appear to be pointers to heap
 objects. The performance trade-offs of these two approaches are unclear:
