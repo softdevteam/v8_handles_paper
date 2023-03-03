@@ -702,10 +702,10 @@ comparison across JavaScript VMs and browsers.
 Objects identified via conservative stack scanning cannot be moved. However, at
 the moment we haven't implemented per-object pinning, so we are forced to
 prevent heap compaction whenever GC occurs and there might be pointers on the
-stack. This is not as onerous as it would be in most VMs, as most GC cycles
-\jake{Hannes says 89\%, but I don't have a source for this, can we get one?}
+stack. This is not as onerous as it would be in most VMs, as over 80\% GC cycles
 occur during the JavaScript event loop, when there can be, by design,
-no pointers on the call stack. \jake{Should we expand on this?}
+no pointers on the call stack\footnote{Based on data from Chrome's \textit{User Metric
+Analysis} for M110 on Windows}.
 
 
 \section{Related Work}
