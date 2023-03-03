@@ -52,7 +52,11 @@ that conservative scanning of direct references tends to only slightly
 over-approximate the root set~\cite{shahriyar14fast}. However, there is no
 clear evidence for the run-time costs of handles relative to direct references
 and conservative scanning (including the costs of checking whether arbitrary words point
-to heap objects). Without such an understanding, it is difficult to
+to heap objects). The nearest work we know of is that of~\cite{kalibera11handles}
+which compares handles with forwarding pointers resulting from concurrent compaction,
+but forwarding pointers still impose a level of indirection over direct references.
+Without an understanding of the performance costs of handles and direct
+references, it is difficult to
 state with confidence whether direct references or handles are the better trade-off.
 
 In this paper we examine the widely used JavaScript VM V8, which has
