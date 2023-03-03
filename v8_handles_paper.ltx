@@ -577,7 +577,8 @@ does not yet support conservative stack scanning.
 Our second experiment aims to tease out the mutator performance of handles and
 direct references from the costs of running the collector -- in other words,
 what are the costs of creating handles \laurie{when a handle scope is
-destroyed, is that memory reclaimed by the GC or normal malloc/free?} and
+destroyed, is that memory reclaimed by the GC or normal malloc/free?} \jake{It
+is reclaimed with a manual free (the delete operator)} and
 having two levels of indirection? Ideally we would turn the collector off
 entirely, but that causes V8's heap (which has a 4GiB maximum size) to
 overflow. Instead, we altered V8 to prevent it from running `intermediate'
