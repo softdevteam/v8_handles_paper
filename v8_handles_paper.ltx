@@ -239,12 +239,10 @@ V8's heap is separated into the young and the old generation.
 It can perform a young generation collection to free up objects in the young generation or a full collection to free up objects in both the young and old generation.
 The young generation uses a semi-space strategy collected by a parallel variant of Cheney's algorithm~\cite{cheney70nonrecursive}.
 \michael{The implementation right now is similar to Halstead's semispace
-collector. The difference is that V8 uses dynamic work lists (storage for
+collector~\cite{halstaed}. The difference is that V8 uses dynamic work lists (storage for
 to-be-processed references) whereas Halstaed's collector reused existing
 storage in the semispace. V8 uses dynamic storage to enable simple workstealing
 algorithms.
-
-https://dl.acm.org/doi/10.1145/800055.802017
 }
 
 Objects which have survived one young generation collection are promoted to the old generation.
@@ -265,7 +263,7 @@ of handles (e.g.~root handles, persistent handles, eternals, and traced
 reference handles), most of these have very narrow, specific uses: we focus in
 this paper exclusively on `normal' handles.
 \michael{V8 also avoids handles in scenarios where it knows that there's no GC call, already today using direct references where feasible}
-\michael{web ref for types of handles: https://v8.dev/docs/embed#handles-and-garbage-collection}
+\michael{web ref for types of handles~\cite{v8handlesweb}}
 
 Comprehensive handles as described in \cref{comprehensive_handles} persist
 throughout a VM's lifetime, with each heap object having a single handle
@@ -795,12 +793,8 @@ Oilpan, the GC for the Blink rendering engine uses conservative stack scanning
 to find roots on the C stack but is able to precisely trace object slots. This
 is a similar design to that we are proposing for V8 in this paper, though
 Oilpan cannot move objects in the heap.
-\michael{In the past we have been citing
-M. Ager, E. Corry, V. Egorov, K. Hara, G. Wibling, and I. Zerny. 2013. Oilpan: Tracing Garbage Collection
-for Blink. (2013). Retrieved September 6, 2018 from https://docs.google.com/document/d/1y7_0ni0E_kxvrahQtnreMlzCDKN3QP4BN1Aw7eSLfY
-
-This is not available anymore. We could cite
-https://research.google/pubs/pub47359/
+\michael{In the past we have been citing~\cite{OilpanRefOutdated}
+This is not available anymore. We could cite~\cite{cross-component-gc}.
 }
 
 Safari's underlying engine WebKit (of which the JavaScript VM, JSC, is a part)
