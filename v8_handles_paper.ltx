@@ -754,19 +754,25 @@ used externally. The collector treats this table as an additional set of roots.
 \laurie{i would not be surprised if the JNI handles are the same as the C++
 handles}
 
-\laurie{let's try relate this to our paper}
 To the best of our knowledge, the most comprehensive study of handles
-is~\cite{kalibera11handles}. They showed how moving handle-based VMs do not suffer
-from \textit{copy reserve overhead}, where the old copy of a moved object must
-be kept around until the mutator only holds references to the new object
-location. Instead, with handles, the space used by evacuated objects can be
-reused immediately as only the handle's address needs updating. With careful
-optimisations, they showed that a handle-based system has same execution time
-overheads as a Brooks-style compacting collector. Some of the ways they describe
-that handles can be optimisated are: using \textit{fat handles} to store
-commonly accessed header information along with the object pointer; grouping
-handles of objects that live and die together to reduce fragmentation in handle
-blocks; and short-circuiting handles for pinned objects.
+is~\cite{kalibera11handles}. They evaluated the cost of handles vs direct
+references within Ovm’s Minuteman RTGC, which uses a mostly-copying collector.
+The OVM scans the C stack conservatively~\cite[p.~6]{armbruster07real} and will not move objects
+it finds that are pointed to from it. In their experiment they
+retrofitted different handle configurations to the OVM and measured their
+performance on a subset of the DiCapo bechmark suite. They observed that
+\textit{thin handles}, that is handles which contain a single pointer had a 13\%
+performance overhead compared to direct references. They also showed how moving
+handle-based VMs do not suffer from \textit{copy reserve overhead}, where the
+old copy of a moved object must be kept around until the mutator only holds
+references to the new object location. Instead, with handles, the space used by
+evacuated objects can be reused immediately as only the handle's address needs
+updating. They note that with careful optimisations, such as using \textit{fat
+handles} to store commonly accessed header information along with the object
+pointer, handle-based systems had the same execution time. \jake{I'm not
+entirely sure how to relate this to our v8 results, I guess we also show that
+mutator performance increases with direct references, but we because of the naive stack scanning
+penalty.}
 
 Firefox's JavaScript engine SpiderMonkey uses handles in a similar fashion to
 V8~\cite{spidermonkey}. \laurie{i'm not sure which bits of the rest of the
