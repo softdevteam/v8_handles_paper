@@ -776,9 +776,10 @@ to most platforms in its long history, and used by a wide variety of software
 its very existence has been the reason why conservative stack scanning
 continues to be supported in practise across languages and compilers.
 
-\jake{Should I mention oilpan here? Or is it too
-"Chrome" to be considered related?} \laurie{i think it's fine to mention it, though 1 or 2 sentences is probably enough} Other conservative collectors for unmanaged
-languages are the .
+Oilpan, the GC for the Blink rendering engines is a hybrid conservative
+collector. It uses conservative stack scanning to find roots on the C stack but
+is able to precisely trace object slots. It supports non-moving generational
+collection by using sticky mark-bits~\cite{demers89combining}.
 
 Safari's underlying engine WebKit (of which the JavaScript VM, JSC, is a part)
 use direct pointers and conservative stack scanning~\cite{pizlo17riptide},
