@@ -434,11 +434,11 @@ For example, string builders and array backing stores are used extensively by
 JavaScript code. When constructing and reallocating their value in memory, a
 handle's intermediate pointer is modified in-place so that this propagates to
 other handles using this value. In contrast, migrating such places to use direct
-references means ensuring they are used exclusively so as not to invalidate other references\jake{I don't think this is
- actually done for performance reasons. It's just easier program this way}.\footnote{When we started our first migration attempt, we had to
+references means ensuring they are used exclusively so as not to invalidate other references
+\footnote{When we started our first migration attempt, we had to
 look for challenging parts of the code like this manually. Coincidentally,
 V8 has since developed a \lstinline{Handle<T>::PatchValue} API which captures
-all the challenging places we know of in a way that makes finding them fairly easy.}
+all the challenging places we know of in a way that makes finding them fairly easy.}.
 
 Similarly, the parts of V8 that enable a transition from C++ code to
 JIT-compiled machine code and back are written in a macro-assembler
@@ -611,15 +611,9 @@ consists of 16 widely used JavaScript web frameworks all modeling the same TodoM
 The benchmark executes various performance critical pieces of a JavaScript VM and the web rendering engine overall, and is therefore considered as one of the most relevant workloads for web browser engine optimizations. %Maybe cite blog posts proving its relevance.
 We used Crossbench to run \speedometer
 for 30 \emph{process executions}, where we close down the browser
-and start a new browser. Crossbench records the wall-clock time of each individual
-benchmark as well as the total time of the process execution \laurie{when does
-the clock start and stop for the process execution?} \jake{It's actually
-speedometer itself that captures the timings. It records each
-individual story's time from within its in-JS benchmark runner, it uses performance.now()
-(https://developer.mozilla.org/en-US/docs/Web/API/Performance/now). I verified
-this myself from the source:
-\lstinline{https://github.com/WebKit/Speedometer/blob/24b094d1cc620be0fecb04e31863dba851fa900e/resources/benchmark-runner.mjs#L231} It then sums them together to
-get the total time.}. We report 99\% confidence intervals for each benchmark.
+and start a new browser. \speedometer records wall-clock times
+using JavaScript's \texttt{performnace.now()}, reporting the
+results back to Crossbench. We report 99\% confidence intervals for each benchmark.
 
 We use Chrome version 112.0.55572 and V8 version 11.2.28. The benchmarks were
 run on a Xeon E3-1240v6 3.7GHz CPU cores, with 32GB of RAM, and running Debian 8.
@@ -749,9 +743,7 @@ Early Smalltalk VMs used handles, which they called \emph{object tables}. Though
 the reasons for this are not made it explicit, they used a compacting GC, so it
 is reasonable to assume this was the
 motivation~\cite[p.~18]{krasner83smalltalk}. Handles are also used in VMs that
-descend from that tradition (e.g.~Self\jake{I can't find a source for this, even
-though it's Lars Bak. There's also nothing immediately obvious in the source
-code}, HotSpot~\cite{hotspot07handles}, Dart~\cite{egorovdart}).
+descend from that tradition (e.g.~HotSpot~\cite{hotspot07handles}, Dart~\cite{egorovdart}).
 
 To the best of our knowledge, the most comprehensive study of handles
 is~\cite{kalibera11handles} which evaluates different styles of handles in the
@@ -759,15 +751,9 @@ context of the Ovm's real-time GC, which uses a concurrent compacting GC.
 Although \cite{kalibera11handles} use the term `direct references' to refer to
 Ovm's initial state, and uses conservative stack scanning, these are not the
 same as our `direct references'. Due to Ovm's concurrent compacting GC,
-accessing an object can require an indirection via the object's `previous'
-location: this occurs because objects identified via conservative stack
-scanning cannot have all `pointers' to them updated, since some might be random
-words on the stack \jake{I don't think this is the reason,armbruster07real
-seems to say they are "mostly-copying" because they wont copy if they find
-conservative roots on the C stack". Instead, i think the reason is that
-concurrent moving will leave the mutator (references from other object slots)
-with stale pointers to the old reference. In such a case they need a forwarding
-pointer indirection}.  They show that, in their context, `thin' or `fat' handles
+mutator threads may still reference an object's `previous' location,
+necessitating a level of indirection to `direct references' to get the
+current location. They show that, in their context, `thin' or `fat' handles
 were more effective than (their use of the term) `direct references' because it
 allowed objects to be moved without requiring forwarding pointers. This is an
 importantly different context to V8, hence our rather different conclusions.
