@@ -238,8 +238,18 @@ A single V8 process can run many unrelated programs by encapsulating them in \em
 V8's heap is separated into the young and the old generation.
 It can perform a young generation collection to free up objects in the young generation or a full collection to free up objects in both the young and old generation.
 The young generation uses a semi-space strategy collected by a parallel variant of Cheney's algorithm~\cite{cheney70nonrecursive}.
+\michael{The implementation right now is similar to Halstead's semispace
+collector. The difference is that V8 uses dynamic work lists (storage for
+to-be-processed references) whereas Halstaed's collector reused existing
+storage in the semispace. V8 uses dynamic storage to enable simple workstealing
+algorithms.
+
+https://dl.acm.org/doi/10.1145/800055.802017
+}
+
 Objects which have survived one young generation collection are promoted to the old generation.
 A full collection collects both the old and the young generation using a mark-sweep-compact strategy.
+All objects in the young generation that survive a full collection are immediately promoted to the old generation.
 Marking and sweeping are performed concurrently~\cite{degenbaev19}.
 Compaction is performed in parallel during the main pause.
 V8 allows its embedder to schedule garbage collections during known program idle times~\cite{degenbaev16idle} which is used by Chrome to improve the user experience.
