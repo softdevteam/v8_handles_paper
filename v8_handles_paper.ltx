@@ -793,9 +793,7 @@ Oilpan, the GC for the Blink rendering engine uses conservative stack scanning
 to find roots on the C stack but is able to precisely trace object slots. This
 is a similar design to that we are proposing for V8 in this paper, though
 Oilpan cannot move objects in the heap.
-\michael{In the past we have been citing~\cite{OilpanRefOutdated}
-This is not available anymore. We could cite~\cite{cross-component-gc}.
-}
+\michael{In the past we have been citing~\cite{ager13oilpan} We could cite~\cite{degenbaev18cross}.}
 
 Safari's underlying engine WebKit (of which the JavaScript VM, JSC, is a part)
 use direct pointers and conservative stack scanning~\cite{pizlo17riptide},
