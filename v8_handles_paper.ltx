@@ -264,6 +264,8 @@ lose track of roots (e.g.~stack references). Although V8 has various kinds
 of handles (e.g.~root handles, persistent handles, eternals, and traced
 reference handles), most of these have very narrow, specific uses: we focus in
 this paper exclusively on `normal' handles.
+\michael{V8 also avoids handles in scenarios where it knows that there's no GC call, already today using direct references where feasible}
+\michael{web ref for types of handles: https://v8.dev/docs/embed#handles-and-garbage-collection}
 
 Comprehensive handles as described in \cref{comprehensive_handles} persist
 throughout a VM's lifetime, with each heap object having a single handle
@@ -367,6 +369,7 @@ Chrome's rendering engine. V8 exposes a simplified \lstinline{Handle}-like
 class called \lstinline{Local}, which also uses two levels of indirection, to
 `external' applications such as Blink. Moving objects between Blink and V8
 requires converting to/from \lstinline{Handle}s/\lstinline{Local}s.
+\michael{... which in the default configuration merely reinterprets memory}
 
 % dump
 % \begin{itemize}
