@@ -763,7 +763,12 @@ same as our `direct references'. Due to Ovm's concurrent compacting GC,
 accessing an object can require an indirection via the object's `previous'
 location: this occurs because objects identified via conservative stack
 scanning cannot have all `pointers' to them updated, since some might be random
-words on the stack. They show that, in their context, `thin' or `fat' handles
+words on the stack \jake{I don't think this is the reason,armbruster07real
+seems to say they are "mostly-copying" because they wont copy if they find
+conservative roots on the C stack". Instead, i think the reason is that
+concurrent moving will leave the mutator (references from other object slots)
+with stale pointers to the old reference. In such a case they need a forwarding
+pointer indirection}.  They show that, in their context, `thin' or `fat' handles
 were more effective than (their use of the term) `direct references' because it
 allowed objects to be moved without requiring forwarding pointers. This is an
 importantly different context to V8, hence our rather different conclusions.
