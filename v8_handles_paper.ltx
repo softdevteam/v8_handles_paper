@@ -34,16 +34,6 @@ To avoid conservative scanning, one can use \emph{handles}, that
 is wrappers around object references, such that the handles allow \emph{precise}
 enumeration of the root set.
 
-\laurie{V8 uses what i'm tentatively calling `partial handles`: that is, it
-crates handles lazily, destroys them when it doesn't need them, and tries to
-use direct references whenever it can. in contrast `comprehensive handles'
-would never use direct references. do spidermonkey and v8 use partial or
-comprehensive handles?}
-\michael{V8: Partial handles.
-Internal runtime calls try to use direct references where no GC finalization is possible.
-Any call that can trigger GC must use handles.
-Most API calls can trigger GC, which results in handles on all API calls for simplicity.
-}
 \label{comprehensive_handles}
 In this paper, we consider this long-standing implementation and design trade-off
 in the context of programming language Virtual Machines (VMs). Some VMs
@@ -185,7 +175,8 @@ An alternative approach to direct references and conservative scanning
 has become known as handles. These were first first introduced in
 recognisable form by~\cite{brooks84trading}, though the term `handles' was only
 used later. Modern VMs use handles in two distinct ways: in this section
-we will consider \emph{comprehensive handles}, as found in~\cite{kalibera11handles}
+we will consider \emph{comprehensive handles}, as found in e.g.~\cite{kalibera11handles}
+and SpiderMonkey~\cite{spidermonkey18rooting} \laurie{checking with shu-yu}
 (in Section~\ref{handles_in_v8} we will consider the other kind of handles).
 
 Comprehensive handles add a level of indirection to all object references, with
