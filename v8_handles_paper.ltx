@@ -414,14 +414,15 @@ replacing \lstinline{Handle} with \lstinline{DirectRef}. However, many parts of
 V8 make assumptions about handles, normally for performance reasons, that are
 not encoded in the \lstinline{Handle} API.
 
-For example, array buffers and string builders are used extensively by
-JavaScript code. Implemented naively these would require a fresh handle to be
-created each time they are resized \laurie{and presumably all handle scopes in the stack of handle scopes have to be searched?}. To improve performance\footnote{When we started our first migration attempt, we had to
+For example, string builders and array backing stores are used extensively by
+JavaScript code. When constructing and reallocating their value in memory, a
+handle's intermediate pointer is modified in-place so that this propagates to
+other handles using this value. In contrast, migrating such places to use direct
+references means ensuring they are used exclusively so as not to invalidate other references\jake{I don't think this is
+ actually done for performance reasons. It's just easier program this way}.\footnote{When we started our first migration attempt, we had to
 look for challenging parts of the code like this manually. Coincidentally,
 V8 has since developed a \lstinline{Handle<T>::PatchValue} API which captures
-all the challenging places we know of in a way that makes finding them fairly easy.}, a handle's
-intermediate pointer is modified in-place so that this propagates to other handles
-using this value.
+all the challenging places we know of in a way that makes finding them fairly easy.}
 
 Similarly, the parts of V8 that enable a transition from C++ code to
 JIT-compiled machine code and back are written in a macro-assembler
