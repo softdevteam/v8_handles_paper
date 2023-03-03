@@ -264,10 +264,10 @@ that is, it uses direct references in those places where it can precisely track
 them (e.g.~object slots), and handles in those places where it would otherwise
 lose track of roots (e.g.~stack references). Although V8 has various kinds
 of handles (e.g.~root handles, persistent handles, eternals, and traced
-reference handles\footnote{For documentation, see \url{https://v8.dev/docs/embed\#handles-and-garbage-collection} (accessed 2023-03-03).}), most of these have very narrow, specific uses: we focus in
-this paper exclusively on `normal' handles.
-There also exist areas in V8 where handles are avoided and GC invocations are prohibited.
-For the purpose of this paper we ignore these scenarios. In practice, pointers in these areas are treated as direct references in all configurations.
+reference handles\footnote{For documentation, see \url{https://v8.dev/docs/embed\#handles-and-garbage-collection} (accessed 2023-03-03).}), most of these have very narrow, specific uses\footnote{There are also a few parts of V8 where handles are forbidden and GC
+is prohibited.}: we focus in
+this paper exclusively on `normal' handles
+
 
 Comprehensive handles as described in \cref{comprehensive_handles} persist
 throughout a VM's lifetime, with each heap object having a single handle
