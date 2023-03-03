@@ -17,7 +17,7 @@ v8_handles_paper.pdf: bib.bib v8_handles_paper.ltx v8_handles_paper_preamble.fmt
 	pdflatex v8_handles_paper.ltx
 	pdflatex v8_handles_paper.ltx
 
-v8_handles_paper_preamble.fmt: v8_handles_paper_preamble.ltx softdev.sty table_no_gc.tex table_no_stack_compact.tex
+v8_handles_paper_preamble.fmt: v8_handles_paper_preamble.ltx softdev.sty table_no_gc.tex table_no_stack_compact.tex experimentstats.tex
 	set -e; \
 	  tmpltx=`mktemp`; \
 	  cat ${@:fmt=ltx} > $${tmpltx}; \
