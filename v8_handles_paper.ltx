@@ -512,7 +512,9 @@ Blink's GC \emph{Oilpan}, specifically the platform specific assembly stubs for
 spilling registers during a stop-the-world pause.
 
 Our conservative stack scanner tests each word on the call stack to see
-whether it's value looks like a pointer to a heap object. We first check if the
+whether values constructed from such words look like pointers to heap object.
+The value are the full word itself and two additinal values for configuratins where V8 compresses pointers.
+For each value, we first check if the
 value points into a page in the heap; if it doesn't, we can quickly move on.
 If the value does point into a page in the heap, we then check if it points to
 an object or empty space. If the value does point to an object, we then query
@@ -780,6 +782,13 @@ Oilpan, the GC for the Blink rendering engine uses conservative stack scanning
 to find roots on the C stack but is able to precisely trace object slots. This
 is a similar design to that we are proposing for V8 in this paper, though
 Oilpan cannot move objects in the heap.
+\michael{In the past we have been citing
+M. Ager, E. Corry, V. Egorov, K. Hara, G. Wibling, and I. Zerny. 2013. Oilpan: Tracing Garbage Collection
+for Blink. (2013). Retrieved September 6, 2018 from https://docs.google.com/document/d/1y7_0ni0E_kxvrahQtnreMlzCDKN3QP4BN1Aw7eSLfY
+
+This is not available anymore. We could cite
+https://research.google/pubs/pub47359/
+}
 
 Safari's underlying engine WebKit (of which the JavaScript VM, JSC, is a part)
 use direct pointers and conservative stack scanning~\cite{pizlo17riptide},
