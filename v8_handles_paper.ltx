@@ -577,9 +577,8 @@ does not yet support conservative stack scanning.
 
 Our second experiment aims to tease out the mutator performance of handles and
 direct references from the costs of running the collector -- in other words,
-what are the costs of creating handles \laurie{when a handle scope is
-destroyed, is that memory reclaimed by the GC or normal malloc/free?} \jake{It
-is reclaimed with a manual free (the delete operator)} and
+what are the costs of creating and destroying handles (whose memory is
+reclaimed manually i.e.~without using the GC) and
 having two levels of indirection? Ideally we would turn the collector off
 entirely, but that causes V8's heap (which has a 4GiB maximum size) to
 overflow. Instead, we altered V8 to prevent it from running `intermediate'
@@ -702,13 +701,14 @@ programs. However, its ubiquity does mean that its strengths and weaknesses as
 a benchmark suite are widely acknowledged, and it allows a good degree of
 comparison across JavaScript VMs and browsers.
 
-Objects identified via conservative stack scanning cannot be moved. However, at
-the moment we haven't implemented per-object pinning, so we are forced to
+Objects identified via conservative stack scanning cannot be moved. However,
+since we have not yet implemented per-object pinning, we are forced to
 prevent heap compaction whenever GC occurs and there might be pointers on the
-stack. This is not as onerous as it would be in most VMs, as over 80\% GC cycles
-occur during the JavaScript event loop, when there can be, by design,
-no pointers on the call stack\footnote{Based on data from Chrome's \textit{User Metric
-Analysis} for Chrome's stable release branch (M110) on Windows}.
+stack. This is not as onerous in a JavaScript VM as it would be for other
+languages' VMs, as over 80\% of V8's GC cycles occur during the JavaScript
+event loop\footnote{Based on data from Chrome's \textit{User Metric Analysis}
+for Chrome's stable release branch (M110) on Windows}, when there can be, by
+design, no pointers on the call stack.
 
 
 \section{Related Work}
@@ -776,10 +776,10 @@ to most platforms in its long history, and used by a wide variety of software
 its very existence has been the reason why conservative stack scanning
 continues to be supported in practise across languages and compilers.
 
-Oilpan, the GC for the Blink rendering engines is a hybrid conservative
-collector. It uses conservative stack scanning to find roots on the C stack but
-is able to precisely trace object slots. It supports non-moving generational
-collection by using sticky mark-bits~\cite{demers89combining}.
+Oilpan, the GC for the Blink rendering engine uses conservative stack scanning
+to find roots on the C stack but is able to precisely trace object slots. This
+is a similar design to that we are proposing for V8 in this paper, though
+Oilpan cannot move objects in the heap.
 
 Safari's underlying engine WebKit (of which the JavaScript VM, JSC, is a part)
 use direct pointers and conservative stack scanning~\cite{pizlo17riptide},
