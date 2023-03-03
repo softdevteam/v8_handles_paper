@@ -759,19 +759,7 @@ allowed objects to be moved without requiring forwarding pointers. This is an
 importantly different context to V8, hence our rather different conclusions.
 
 Firefox's JavaScript engine SpiderMonkey uses handles in a similar fashion to
-V8~\cite{spidermonkey}. \laurie{i'm not sure which bits of the rest of the
-paragraph are different than V8.} Spidermonkey
-developers must ensure that each pointer to a JavaScript object on the stack is
-registered as root for garbage collection. Additional references to a JavaScript
-object can then be created, which access it indirectly through the originally
-rooted value. Rooted values are registered in lists based on scope, with
-persistent handles available for longer living roots. Handles cannot be stored
-on the heap as they could end up outliving their root. SpiderMonkey
-uses a static analysis tool to make sure that raw pointers are not accidentally
-put on the stack when a garbage collection can take place. The Gecko Rendering
-engine is used in firefox. It is written in C++ and manages its DOM heap with
-reference counting. It implements a cycle collector based on
-\cite{bacon01concurrent}.
+V8~\cite{spidermonkey}, including similar lints to catch handle misuse.
 
 The use of direct pointers implicitly requires conservative scanning of at
 least the stack. However, most (perhaps all) programming languages and most
