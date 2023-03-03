@@ -806,8 +806,21 @@ Object headers have back-pointers to their canonical handle.
 % - Forkscan Reclamation: https://dspace.mit.edu/bitstream/handle/1721.1/123336/forkscan-eurosys-17.pdf
 % - Sound GC for C using taint analysis: https://dl.acm.org/doi/pdf/10.1145/3428244
 
+
 \section{Conclusions}
 \label{sec:conclusion}
+
+Our results tentatively validate our initial hypothesis: moving from
+handles to direct references improves V8's performance. We base this conclusion
+on the fact that we have accurately measured handles performance, but have merely
+provided a lower bound of direct references. It is highly likely that once
+all of V8 is migrated to direct references -- which will remove bottlenecks
+when moving between migrated and unmigrated code -- the measured performance
+of direct references will improve further. When considered together with the fact
+that using direct references removes the potential for handle misuse to
+cause security flaws, we believe that this provides a strong motivation for
+V8 to move to using direct references. It may also provide an interesting data
+point for other VMs that currently use handles.
 
 % \textbf{Acknowledgements:} Hughes was funded by a research gift from Google. Tratt
 % was funded by the Shopify / Royal Academy of Engineering Research Chair in Language
