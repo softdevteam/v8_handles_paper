@@ -132,8 +132,8 @@ Unfortunately, stackmaps are not yet widely available. GCC does not
 have any support for stackmaps. LLVM does have some stackmap support,
 but (as some of this paper's authors have discovered in other work), it
 is experimental, incomplete, and unsupported, with particular problems at
-higher optimisation levels. \jake{I don't think the gc root stuff is worth
-mentioning, but should we cite the statepoint docs?}
+higher optimisation levels.
+
 In practise, therefore, VMs using direct references have to turn to
 \emph{conservative scanning}, where the C call stack is exhaustively examined for
 pointers to instances of \texttt{Obj}. In order for this to work, the GC must
