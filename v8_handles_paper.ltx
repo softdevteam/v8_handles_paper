@@ -631,14 +631,14 @@ benchmarking and did not observe any oddities such as the machine overheating.
 
 \label{results}
 
-\cref{table:nocompact} shows the results from our first experiment,
+\cref{table} \jake{and this} shows the results from our first experiment,
 which is a straightforward comparison of V8 before and after our migration.
 Statistically, this shows V8 with handles to have indistinguishable
 performance from direct references. Since our migration of V8 is only
 partial, this provides a lower bound on direct references performance,
 showing that, at worst, they are no slower than handles.
 
-\cref{table:min} shows the results from our second experiment, where we
+\cref{table}\jake{We'll need a better way of saying this}  shows the results from our second experiment, where we
 try to take the costs of collection out of the comparison: looked
 at in this way, direct references are \mintotalpdiff faster than handles.
 
@@ -649,14 +649,14 @@ benchmarks, in essence `diffing' the profiling data. Two benchmarks
 serve as exemplars of the effects of our migration.
 
 The \jquery benchmark (where direct references are \minjquerypdiff faster than handles
-in~\cref{table:min}),
+in~\cref{table:min}\jake{needs fixing}),
 puts particular stress on interactions between
 the Blink's DOM heap and V8's JavaScript heap -- a part of V8 which we almost entirely
 migrated (see~\cref{migrated}). Our profile showed that direct references were
 approximately 15\% faster in these parts of the embedder API.
 
 The \emberjsdebug benchmark (where direct references are statistically
-indisguishable from handles in~\cref{table:min}) puts stress on: entry to parts
+indisguishable from handles in~\cref{table:min}\jake{needs fixing}) puts stress on: entry to parts
 of the JIT compiler; a section of the inline cache; and JavaScript debug
 objects. Other than small parts of the inline cache, none of these sections of
 V8 have been converted to use direct references. However, each of them interact frequently with parts of V8 we have migrated: in other
