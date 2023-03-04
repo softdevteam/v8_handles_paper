@@ -519,6 +519,36 @@ JavaScript runtime.
 \end{enumerate}
 
 
+\makeatletter
+\newcommand*\ExpandableInputTwo[1]{\@@input#1 }
+\makeatother
+
+ \begin{table*}[t]
+     \begin{tabular}{lllll}
+ \toprule
+    \multirow{2}{*}{Benchmark} & \multicolumn{2}{c}{\firstexp} & \multicolumn{2}{c}{\secondexp} \\
+\cmidrule(l){2-3} \cmidrule(l){4-5}
+& Handles (ms) & Direct Refs (ms) & Handles (ms) & Direct Refs (ms) \\
+ \midrule
+\ExpandableInputTwo{./table}
+ \bottomrule
+ \end{tabular}
+ \vspace{6pt}
+\caption{Results from both our experiments: for each we ran \speedometer 30 times and
+     report 99\% confidence intervals. \firstexp is a straightforward
+     comparison between handles and direct references with the GC (largely)
+     running as normal on \speedometer. This implicitly includes the full costs
+     of both handles (creating handles; destroying handles; an extra level of
+     indirection) and direct references (conservative stack scanning). These
+     results clearly show that, within the margin of errors, V8 partly migrated
+     to direct references is no slower than running solely with handles. \secondexp
+     teases out the mutator performance of handles
+     and direct references without gc costs. This clearly shows that, when GC is
+     remove from the equation, direct references are faster.}
+\label{table:results}
+\end{table*}
+
+
 \subsection{Conservative Stack Scanning}
 
 Direct references require conservative stack scanning, so we needed to add
@@ -550,35 +580,6 @@ before examining the results (\cref{results}).
 
 \subsection{Methodology}
 \label{methodology}
-
-\makeatletter
-\newcommand*\ExpandableInputTwo[1]{\@@input#1 }
-\makeatother
-
- \begin{table*}[t]
-     \begin{tabular}{lllll}
- \toprule
-    \multirow{2}{*}{Benchmark} & \multicolumn{2}{c}{\firstexp} & \multicolumn{2}{c}{\secondexp} \\
-\cmidrule(l){2-3} \cmidrule(l){4-5}
-& Handles (ms) & Direct Refs (ms) & Handles (ms) & Direct Refs (ms) \\
- \midrule
-\ExpandableInputTwo{./table}
- \bottomrule
- \end{tabular}
- \vspace{6pt}
-\caption{Results from both our experiments: for each we ran \speedometer 30 times and
-     report 99\% confidence intervals. \firstexp is a straightforward
-     comparison between handles and direct references with the GC (largely)
-     running as normal on \speedometer. This implicitly includes the full costs
-     of both handles (creating handles; destroying handles; an extra level of
-     indirection) and direct references (conservative stack scanning). These
-     results clearly show that, within the margin of errors, V8 partly migrated
-     to direct references is no slower than running solely with handles. \secondexp
-     teases out the mutator performance of handles
-     and direct references without gc costs. This clearly shows that, when GC is
-     remove from the equation, direct references are faster.}
-\label{table:results}
-\end{table*}
 
 The overall question we would like our experiment to answer is: are handles
 or direct references faster? While we can provide an accurate assessment
