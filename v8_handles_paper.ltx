@@ -15,7 +15,7 @@ a level of indirection than they pay through conservative stack scanning
 (including the costs of checking whether arbitrary words point
 to heap objects)? In this paper we study the performance difference
 between these two approaches by migrating around half of V8 from handles to
-pointers: we show that, even though our partial migration imposes
+direct references: we show that, even though our partial migration imposes
 additional costs and our conservative stack scanner is naive, direct
 references are at least as fast as handles on the \speedometer benchmark
 suite.
@@ -37,22 +37,24 @@ the heap. This over-approximates the true root set as some non-pointers
 may have a value which also happens to be a pointer to an object.
 To avoid conservative scanning, one can use \emph{handles}, that
 is wrappers around object references, such that the handles allow \emph{precise}
-enumeration of the root set.
+enumeration of all roots.
 
 \label{comprehensive_handles}
 In this paper, we consider this long-standing implementation and design trade-off
 in the context of programming language Virtual Machines (VMs). Some VMs
-(e.g.~HotSpot, SpiderMonkey~\cite{spidermonkey18rooting}, V8) use handles; some (e.g.~JavaScriptCore and
+(e.g.~HotSpot~\cite{hotspot07handles},
+SpiderMonkey~\cite{spidermonkey18rooting}, V8) use handles; some
+(e.g.~JavaScriptCore~\cite{pizlo17riptide} and
 those VMs using the Boehm-Demers-Weiser GC) use \emph{direct references}
-(i.e.~`normal pointers'), and partial
-or complete conservative scanning. There is little debate about the relative
-ergonomics: handles are more difficult to use, and some kind of misuse
-lead to security flaws. We also now have good evidence
+(i.e.~`normal pointers'), and conservative scanning (including the stack,
+but sometimes heap objects as well).
+
+There is little debate about ergonomics: handles are more difficult to use, and some kinds of misuse
+lead to security flaws. There is also now good evidence
 that conservative scanning of direct references tends to only slightly
 over-approximate the root set~\cite{shahriyar14fast}. However, there is no
 clear evidence for the run-time costs of handles relative to direct references
-and conservative scanning (including the costs of checking whether arbitrary words point
-to heap objects). The nearest work we know of is that of~\cite{kalibera11handles}
+and conservative stack scanning. The nearest work we know of is that of~\cite{kalibera11handles}
 which compares handles with forwarding pointers resulting from concurrent compaction,
 but forwarding pointers still impose a level of indirection over direct references.
 Without an understanding of the performance costs of handles and direct
@@ -66,13 +68,14 @@ However, moving wholesale from handles to direct references is impractical on a
 codebase of V8's size (approximately 1.75MLoC).
 Our first challenge was thus
 to find a practical means for gradually migrating parts of V8 from handles to
-direct references (Section~\ref{sec:migration}). Having then migrated a
-around half of V8 from handles to direct references,
+direct references (Section~\ref{sec:migration}). Having then migrated approximately
+half of V8 from handles to direct references,
 and implemented a naive conservative stack
-scanner, we then run several standard V8 benchmark
-suites, and find that direct references are at least as fast as handles
-(\cref{sec:evaluation}). This
-suggests that a complete migration of V8 to direct references, and a more
+scanner, we then run the well known \speedometer benchmark suite,
+and find that direct references are at least as fast as handles
+(\cref{sec:evaluation}). Since our partial migration includes costs that would
+not apply to a complete migration, this establishes a lower bound for direct references
+performance. This suggests that a complete migration of V8 to direct references, and a more
 sophisticated conservative stack scanner, will improve V8's performance
 while reducing a class of security flaw.
 
@@ -86,7 +89,7 @@ hypothetical VM, written in C, that implements an object orientated language.
 In this VM, every language-level object is an instance of a \texttt{struct} called
 \texttt{Obj}, which we will assume has a single field \texttt{data} of type
 \texttt{int}. We assume that the VM contains a GC that runs in a thread
-concurrently with other VM threads: thus the GC can free the memory of any
+concurrently with other VM threads, and thus the GC can free the memory of any
 unreachable \texttt{Obj} at any point.
 
 
@@ -145,37 +148,38 @@ is experimental, incomplete, and unsupported, with particular problems at
 higher optimisation levels.
 
 In practise, therefore, VMs using direct references have to turn to
-\emph{conservative scanning}, where the C call stack is exhaustively examined for
-pointers to instances of \texttt{Obj}. In order for this to work, the GC must
+\emph{conservative stack scanning}, where the C call stack is exhaustively examined for
+possible pointers to instances of \texttt{Obj}. This requires the GC to
 know at what address a thread's stack began, and what address the stack is
 currently at. Each aligned word on the stack is then checked to see whether
-it references an instance of \texttt{Obj}: if it does, that \texttt{Obj} is
+it points to an instance of \texttt{Obj}: if it does, that \texttt{Obj} is
 considered a root. Depending on the GC, checking whether an arbitrary word is a
 pointer to an \texttt{Obj} can be fairly expensive, particularly if the GC
-requires interior pointers to objects be translated to base pointers. Conservative
-scanning also inherently
+requires interior pointers to objects be translated to base pointers --- we
+consider these costs inherent to conservative stack scanning.
+
+Conservative stack scanning inherently
 over-approximates the root set, because random words on the stack may
 accidentally point to an \texttt{Obj}, keeping it alive longer than necessary.
-Fortunately, in practise relatively few objects are kept alive unnecessarily long:
+Fortunately, in practise relatively few objects tend to be kept alive unnecessarily long:
 the most extensive study we know of suggests the false detection rate
 in Java programs is under 0.01\% of live objects~\cite{shahriyar14fast}.
 
 Objects identified as live via conservative scanning must also be pinned in
-memory. Fully conservative GCs, that is GCs who conservatively scan all parts
-of memory, from the call stack to the heap, (e.g.~the Boehm-Demers-Weiser
-GC~\cite{boehm88garbage}) are fundamentally unable to move any objects in
-memory. Most conservative GCs are semi-conservative, that is most references to
-objects are determined precisely, with only some roots discovered
-conservatively. Semi-conservative GCs must temporarily pin those objects
-identified as live by conservative scanning, because they cannot know whether
-such references can be safely rewritten or not.
+memory, as the GC cannot know whether pointers to those objects on the stack
+are `genuine' or `accidental'. Fully conservative GCs, that is GCs who conservatively scan all parts
+of memory, from the call stack to the heap (e.g.~the Boehm-Demers-Weiser
+GC~\cite{boehm88garbage}) are thus unable to move any objects in
+memory. However, many GCs are semi-conservative, that is most references to
+objects are determined precisely, with only roots on the stack discovered
+conservatively.
 
-Conservative scanning also occupies an odd position in software. Technically speaking, the
+Conservative scanning occupies an odd position in software. Technically speaking, the
 way it works violates the rules of most languages, most compilers, and most
 operating systems. Furthermore, some programming techniques
 (e.g.~XOR lists) thoroughly defeat it.
 However, because conservative scanning is widely used (e.g.~the well-known
-Boehm-Demers-Weiser GC~\cite{boehm88garbage} and WebKit~\cite{pizlo17riptide}),
+Boehm-Demers-Weiser GC and WebKit~\cite{pizlo17riptide}),
 it is well supported in practise.
 
 
@@ -183,7 +187,7 @@ it is well supported in practise.
 \label{handles_general}
 
 An alternative approach to direct references and conservative scanning
-has become known as handles. These were first first introduced in
+has become known as handles. These were first introduced in
 recognisable form by~\cite{brooks84trading}, though the term `handles' was only
 used later. Modern VMs use handles in two distinct ways: in this section
 we will consider \emph{comprehensive handles}, as found in e.g.~\cite{kalibera11handles}
@@ -205,8 +209,8 @@ Our hypothetical GC needs three altered/new functions: \texttt{Handle
 *gc\_new\_obj()} returns a pointer to a handle, where the handle points to a
 freshly initialised \texttt{Obj}; \texttt{Obj *tag(Handle *)} which increments
 a handle's tag count by one and returns a pointer to the underlying
-\texttt{Obj}; and \texttt{void untag(Handle *)} which decrement the handle's
-tag count by one. For example:
+\texttt{Obj}; and \texttt{void untag(Handle *)} which decrements the handle's
+tag count by one. An example of this API in use looks like:
 
 \begin{lstlisting}[language=C]
 Handle *h = gc_new_obj();
@@ -222,7 +226,7 @@ Second, handles are fully portable, do not trifle with undefined behaviour,
 and require no explicit language or compiler support.
 Third, any \texttt{Handle} with a zero tag count can have its
 underlying \texttt{Obj} safely moved. In other words, handles
-make it trivial to write precise, (almost fully) moving GCs. Comprehensive handles also
+make it trivial to write precise, moving GCs. Comprehensive handles also
 have the virtue that moving an \texttt{Obj} requires only updating its
 corresponding \texttt{Handle}.
 
@@ -240,26 +244,24 @@ fragmentation; and tagging / untagging a handle requires memory reads and writes
 
 \section{Handles in V8}
 
-V8 is a popular JavaScript and WebAssembly VM, embedded in all Chromium-based browsers like Google's Chrome and various other prominent software systems like node.js, deno, Electron, etc.
+V8 is a widely used JavaScript and WebAssembly VM, embedded in Chromium-based browsers (e.g.~Chrome)
+and other well known systems (e.g.~NodeJS).
 In this section we introduce some general V8 background, before describing V8's use of handles.
 
 V8 is largely written in C++.
-A single V8 process can run many unrelated programs by encapsulating them in \emph{isolates} which all come with their own private heaps.
-V8's heap is separated into the young and the old generation.
-It can perform a young generation collection to free up objects in the young generation or a full collection to free up objects in both the young and old generation.
-The young generation uses a semi-space strategy collected by a variant of Halstaed's collector~\cite{halstaed} with the difference being that V8's version uses dynamically-sized lists of segments to allow for work stealing.
-
-Objects which have survived one young generation collection are promoted to the old generation.
-A full collection collects both the old and the young generation using a mark-sweep-compact strategy.
-All objects in the young generation that survive a full collection are immediately promoted to the old generation.
-Marking and sweeping are performed concurrently~\cite{degenbaev18cross}.
-Compaction is performed in parallel during the main pause.
-V8 allows its embedder to schedule garbage collections during known program idle times~\cite{degenbaev16idle} which is used by Chrome to improve the user experience.
+A single V8 process can run many unrelated programs by encapsulating them in \emph{isolates}, each of which has a private heap.
+Each heap is separated into young and old generations.
+Young generation-only collection uses a semi-space strategy that is a variant of Halstaed's approach~\cite{halstaed} (though V8 uses dynamically-sized lists of segments to allow for work stealing).
+A young and old generation collection uses a mark-sweep-compact strategy
+where marking and sweeping are performed concurrently~\cite{degenbaev18cross},
+and compaction occurs during idle time~\cite{degenbaev16idle}.
+Collection can also be performed during idle time to reduce latency from the user's
+perspective.
 
 \label{handles_in_v8}
 
 V8 uses handles to determine the root set of objects. Unlike the simple
-VM described in \cref{comprehensive_handles}, V8 uses \emph{partial handles}:
+VM described in \cref{handles_general}, V8 uses \emph{partial handles}:
 that is, it uses direct references in those places where it can precisely track
 them (e.g.~object slots), and handles in those places where it would otherwise
 lose track of roots (e.g.~stack references). Although V8 has various kinds
@@ -269,7 +271,7 @@ is prohibited.}: we focus in
 this paper exclusively on `normal' handles
 
 
-Comprehensive handles as described in \cref{comprehensive_handles} persist
+Comprehensive handles as described in \cref{handles_general} persist
 throughout a VM's lifetime, with each heap object having a single handle
 pointing to it. In contrast, V8's partial handles are temporary, being
 regularly created and destroyed: any object may, both at any given point
@@ -292,7 +294,7 @@ instances. The \lstinline{Handle} class exposes a pointer-like API (e.g.~the
 dereferencing `\texttt{*}' operator on a handle returns an \lstinline{Object})
 that makes it relatively transparent in use. A \lstinline{Handle} instance
 contains a pointer to the underlying handle but no additional storage
-(i.e.~\lstinline{size_of(Handle<T>) == size_of(T*)}, giving programmers
+(i.e.~\texttt{size\_of\-(Handle<T>) == size\_of(T*)}, giving programmers
 confidence about handle storage and moving costs.
 
 A challenge with partial handles is knowing when they are no longer needed. To
@@ -307,12 +309,11 @@ which also destroys all the handles it contains.
 
 Handle scopes ensure that C++ code dealing with objects remains relatively
 terse, and reduces several opportunities for programmer mistakes. However, C++
-code must carefully ensure that it does not leak a direct pointer to an object
+code must carefully ensure that it does not leak a pointer to an object
 beyond the lifetime of the handle scope that references that object --- doing
-so causes undefined behaviour. V8 has various `lints' to detect many such
-mistakes, one such example is \emph{gcmole}, a tool used to find uses of
-\lstinline{Handle} instances in the V8 codebase which may be unsafe for GC.
-However, they cannot capture all
+so causes undefined behaviour. V8 has various lints (for example \emph{gcmole})
+which search the codebase for possible API misuse and warn when such
+instances are found. However, lints cannot identify all
 possible misuses: some misuses are later detected in debug builds, but some
 misuses end up in release code, where they can become a significant security
 concern.
@@ -353,7 +354,7 @@ method which allow a handle to be safely moved to the parent handle scope.
 
 Handle scopes are an important performance optimisation, since destroying
 a handle scope causes its backing storage containing multiple handles
-to be destroyed in one go: neither individual deallocation nor any form
+to be destroyed in one go: neither individual deallocation or any form
 of handle compaction is necessary.
 
 A further optimisation is based on the observation that within a given handle
@@ -371,7 +372,7 @@ Chrome's rendering engine. V8 exposes a simplified \lstinline{Handle}-like
 class called \lstinline{Local}, which also uses two levels of indirection, to
 `external' applications such as Blink. Moving objects between Blink and V8
 requires converting to/from \lstinline{Handle}s/\lstinline{Local}s,
-though the default configuration optimises these conversions to be
+though the default configuration optimises these conversions to
 a compile-time cast (i.e.~there is no run-time copying of data).
 
 % dump
@@ -395,7 +396,9 @@ a compile-time cast (i.e.~there is no run-time copying of data).
 \label{sec:migration}
 
 Migrating from handles to direct references sounds like it should be easy, but
-on a codebase of V8's size and complexity turns out to be rather hard.
+on a codebase of V8's size and complexity turns out to be rather hard -- this
+paper is the result of our second migration attempt! In this section we explain our general migration
+strategy, the challenges any migration strategy faces, and what we have migrated.
 
 
 \subsection{Migration Strategy}
@@ -413,7 +416,7 @@ This paper is the result of our second migration attempt. We used the
 experience from our first failed attempt to devise a scheme that allows us to
 gradually migrate small portions of V8 from handles to direct references.
 The migration is `hidden' behind a compile-time flag that is false by default,
-allowing us to upstream many of our changes without affecting mainstream
+allowing us to incrementally upstream our changes without affecting mainstream
 users.
 
 The most obvious part of our gradual migration approach is to realise that
@@ -434,8 +437,8 @@ For example, string builders and array backing stores are used extensively by
 JavaScript code. When constructing and reallocating their value in memory, a
 handle's intermediate pointer is modified in-place so that this propagates to
 other handles using this value. In contrast, migrating such places to use direct
-references means ensuring they are used exclusively so as not to invalidate other references
-\footnote{When we started our first migration attempt, we had to
+references means ensuring they are used exclusively so as not to invalidate other
+references\footnote{When we started our first migration attempt, we had to
 look for challenging parts of the code like this manually. Coincidentally,
 V8 has since developed a \lstinline{Handle<T>::PatchValue} API which captures
 all the challenging places we know of in a way that makes finding them fairly easy.}.
@@ -445,9 +448,8 @@ JIT-compiled machine code and back are written in a macro-assembler
 which is translated into each platform's assembly format. The
 macro-assembler does not refer to the \lstinline{Handle}
 class directly but generates code which implicitly follows handle conventions.
-The macro assembly codes need to be carefully checked and edited by hand and
-cannot be done partially: i.e. anything calling into them must be either direct
-or handle, it can't be a mix and match.
+We had to carefully adjust the macro assembler to follow the state of migration
+in C++ code.
 
 Another difficulty was balancing the long-term ergonomics of direct references
 with the temporary needs of handles. The chief problem is that the
@@ -461,43 +463,46 @@ awkward and muddy performance comparisons. Instead, we assume that a
 \lstinline{Handle} created from a \lstinline{DirectRef} lives in the current
 isolate. When this assumption is incorrect (for example, when the JIT compiler
 hands compilation off to another thread), we almost always get an immediate
-crash. Fixing such a crash can be tedious, as the right isolate needs to
-be threaded through (potentially many) layers.
+crash. Fixing such a crash can be tedious, as the necessary isolate needs to
+be threaded through one or more layers.
 
 
-\subsection{Performance Challenges}
+\subsection{Performance Challenges While Migrating}
 \label{null_check}
 
-Our migration imposes two performance costs while migration is ongoing.
+Since migrated and unmigrated code frequently interact, moving from code
+which uses direct references to code using handles or back again requires
+additional computation.
 
-First, since migrated and unmigrated code frequently interact, moving from code
-which uses direct references to code using handles requires creating handles.
-Occasionally this can create significant bottlenecks where handles are
-continually created simply to interface with unmigrated code. This can lead to
-the surprising outcome that migrating a small portion of code can create a
-significant slowdown while migrating a tiny additional portion of code can
-increase performance. Since migration sometimes imposes handle creation costs
+Migrated code that interfaces with unmigrated code must create handles.
+This sometimes lead to the surprising outcome that migrating a small portion of code created a
+significant slowdown; in general, migrating a small additional portion of code
+restored performance. In the early stages of migration we frequently encountered
+this problem. However, since migration sometimes imposes handle creation costs
 on the callers of a function, we were often unsure which callers of a migrated
 function were causing performance problems. We eventually developed a simple
 `profiler' which pinpoints how often a line of source code creates handles,
 allowing us to quickly identify such locations.
 
-Second, V8 uses \emph{tagged pointers} to avoid storing small integers as full
+When moving from unmigrated code to migrated code we have to take
+account of V8's uses of \emph{tagged pointers}, which avoids storing small integers as full
 objects on the heap. The tagging is done on the `pointer' from a handle to a
 heap object: if the top bit is set to 1, this is really a pointer; if the top
 bit is set to 0, it is a small integer. We use the same pointer tagging scheme in
 \lstinline{DirectRef}. However, when converting from handles to direct
-references, we have to handle \emph{null handles} with care. Null handles are
-used in V8 e.g.~as place holders. To avoid allocating backing memory, the
+references, we have to treat \emph{null handles} (which are often used
+as place holders) with care. To avoid allocating backing memory, the
 `nullness' is represented by a null pointer to the handle itself. In other
 words, a null \lstinline{Handle} instance itself contains a null pointer, but
 if a small integer is stored, the \lstinline{Handle} points to a handle whose
-tagged pointer has a top bit set to 0. This representation makes sense for
-\lstinline{Handle}, but we have to convert null handles to
-\lstinline{DirectRef} tagged pointers (whose value is simply one). Converting
-from \lstinline{Handle}s to \lstinline{DirectRef}s thus requires an extra
+tagged pointer has a top bit set to 0. We have to flatten this representation
+for \lstinline{DirectRef}. Thus, converting
+from \lstinline{Handle}s to \lstinline{DirectRef}s requires an extra
 compare-and-branch to deal with null handles correctly: though the cost of this
-check is small, it will definitely have a cost in the general case.
+check is small, it imposes a performance cost in the general case.
+
+Since our migration of V8 is partial, these performance costs show up in our
+later experiments. A full migrated V8, however, would show no such costs.
 
 
 \subsection{What We Migrated}
@@ -562,14 +567,13 @@ spilling registers during a stop-the-world pause.
 
 Our conservative stack scanner tests each word on the call stack to see
 whether values constructed from such words look like pointers to heap object.
-The value are the full word itself and two additional values for configuratins where V8 compresses pointers.
 For each value, we first check if the
-value points into a page in the heap; if it doesn't, we can quickly move on.
+value points into a page in the heap; if it doesn't, we quickly move on.
 If the value does point into a page in the heap, we then check if it points to
 an object or empty space. If the value does point to an object, we then query
 the isolate's heap layout to find out the object's base pointer. Our scanner
-is not yet production ready: compared to Oilpan's scanner, it is clear that
-it could be much more heavily optimised.
+is not yet production ready: compared to Oilpan's scanner, it is relatively
+unoptimised.
 
 
 \section{Evaluation}
@@ -591,7 +595,7 @@ direct references' performance: around half of V8's (large) codebase remains
 unmigrated, and the conservative stack scanner we have implemented is naive,
 and thus slower than a production version. We are also forced to use a single
 generation heap because the young generation scavenger is a moving semi-space
-collector, and work to move this to a non-moving generational GC has not yet
+collector, and work to migrate this to a non-moving generational GC has not yet
 been carried out. Fortunately, and despite these restrictions, our experiment
 is able to provide valuable insights.
 
@@ -600,8 +604,8 @@ references, with the GC running as normal (subject to the restrictions noted
 earlier). This implicitly includes the full costs of both handles (creating
 handles; destroying handles; an extra level of indirection) and direct
 references (conservative stack scanning). We disable heap
-compaction when a GC is scheduled while there are frames on the C++ stack as it
-does not yet support conservative stack scanning.
+compaction when a GC is scheduled and there are frames on the C++ stack, as
+the compacter is not yet aware of conservative stack scanning.
 
 Our second experiment \emph{\secondexp} aims to tease out the mutator performance of handles and
 direct references from the costs of running the collector -- in other words,
@@ -618,7 +622,7 @@ collection per process execution.
 We evaluate each browser variant on the well known \speedometer browser benchmark
 suite~\cite{speedometer} using Chrome's Crossbench benchmark runner. \speedometer
 consists of 16 widely used JavaScript web frameworks all modeling the same TodoMVC application.
-The benchmark executes various performance critical pieces of a JavaScript VM and the web rendering engine overall, and is therefore considered as one of the most relevant workloads for web browser engine optimizations. %Maybe cite blog posts proving its relevance.
+This benchmark suite executes various performance critical pieces of a JavaScript VM and the web rendering engine overall, and is therefore considered one of the most relevant workloads for web browser engine optimizations. %Maybe cite blog posts proving its relevance.
 We used Crossbench to run \speedometer
 for 30 \emph{process executions}, where we close down the browser
 and start a new browser. \speedometer records wall-clock times
@@ -643,7 +647,8 @@ and our conservative stack scanner is naive -- handles and direct
 references have indistinguishable performance. This establishes a lower bound
 for direct references performance. It is possible (indeed, likely) that
 completing the migration from handles to direct references, and improving the
-performance of the conservative stack scanner, will improve this lower bound.
+performance of the conservative stack scanner, will meaningfully improve upon
+this lower bound.
 
 The results for \secondexp show that, by (largely) discounting the costs of collection
 -- which include our naive conservative stack scanner -- and looking solely at
@@ -656,7 +661,7 @@ references.
 \subsection{Further Analysis}
 
 The V8 variants from \secondexp give us the opportunity to better understand
-the effect of our partial migration. We used Linux's \texttt{perf}
+some detailed effects of our partial migration. We used Linux's \texttt{perf}
 tool to examine the V8 variants from our second experiment on single runs of
 benchmarks, in essence `diffing' the profiling data. Two benchmarks
 serve as exemplars of the effects of our migration.
@@ -664,7 +669,7 @@ serve as exemplars of the effects of our migration.
 The \jquery benchmark (where direct references are \minjquerypdiff faster than handles
 in~\cref{table:results}),
 puts particular stress on interactions between
-the Blink's DOM heap and V8's JavaScript heap -- a part of V8 which we almost entirely
+the Blink's DOM heap and V8's JavaScript heap --- a part of V8 which we almost entirely
 migrated (see~\cref{migrated}). Our profile showed that direct references were
 approximately 15\% faster in these parts of the embedder API.
 
@@ -672,10 +677,10 @@ The \emberjsdebug benchmark (where direct references are statistically
 indistinguishable from handles in~\cref{table:results}) puts stress on: entry to parts
 of the JIT compiler; a section of the inline cache; and JavaScript debug
 objects. Other than small parts of the inline cache, none of these sections of
-V8 have been converted to use direct references. However, each of them interact frequently with parts of V8 we have migrated: in other
+V8 have been converted to use direct references. However, each of them interacts frequently with parts of V8 we have migrated: in other
 words, we pay frequent conversion costs to/from handles due to the partial
 migration. Our profiling data shows a ~30\% slow down in parts of the execution
-engine (responsible for invoking JS functions) which interact with non-migrated
+engine (responsible for invoking JavaScript functions) which interact with non-migrated
 code.
 
 % 89\% of garbage collections in Chrome are happening without a stack when we are on the message loop.
@@ -692,19 +697,19 @@ our view of the merits of direct references. We have tried to mitigate this by
 migrating what we consider to be the most challenging parts of V8 first.
 While V8 is only partly migrated, there are also performance overheads
 involved in moving between migrated and unmigrated code (e.g.~the null
-checks explained in \cref{null_check}): these are very likely to lower our view
-of direct references performance.
+checks explained in \cref{null_check}): our results can only establish a lower bound
+for direct references performance.
 
 JavaScript VMs such as V8 are somewhat unusual amongst modern VMs in two
 respects: JavaScript is single-threaded; and it is based around an event loop
 which naturally gives frequent opportunities to perform garbage collection
 without pointers existing on the C stack. These two factors may have a
-notable impact on our understand of the performance merits of direct references
+notable impact on our understanding of the performance merits of direct references
 and handles. We would have to migrate at least one non-JavaScript VM
 (e.g.~HotSpot) to understand whether these are significant factors or not.
 
 There are two differences between the configurations of Chrome/V8 we run and
-those run by normal users. First, we had to disable V8's young generation,
+those run by normal users. First, we have to disable V8's young generation,
 because it does not support pinning immovable objects which were located by
 conservative stack scanning. Second, we
 do not have the ability to generate or use the profile-guided-optimisation data
@@ -712,12 +717,6 @@ that production builds have access to.
 At best, these two factors mean that our Chrome/V8 builds will be slower than
 their production cousins; at worst, it could be that this changes the relative
 performance of handles and direct references.
-
-\speedometer is a small, synthetic benchmark suite: like any finite-sized
-benchmark suite, it can not tell us about the performance of all possible
-programs. However, its ubiquity does mean that its strengths and weaknesses as
-a benchmark suite are widely acknowledged, and it allows a good degree of
-comparison across JavaScript VMs and browsers.
 
 Objects identified via conservative stack scanning cannot be moved. However,
 since we have not yet implemented per-object pinning, we are forced to
@@ -728,6 +727,12 @@ event loop\footnote{Based on data from Chrome's \textit{User Metric Analysis}
 for Chrome's stable release branch (M110) on Windows}, when there can be, by
 design, no pointers on the call stack.
 
+\speedometer is a small, synthetic benchmark suite: like any finite-sized
+benchmark suite, it can not tell us about the performance of all possible
+programs. However, its ubiquity does mean that its strengths and weaknesses as
+a benchmark suite are widely acknowledged, and it allows a good degree of
+comparison across JavaScript VMs and browsers.
+
 
 \section{Related Work}
 \label{sec:related}
@@ -737,11 +742,11 @@ and VMs, though quantitative comparisons are few in number. Generalising
 somewhat, one technique or the other has tended to hold sway either at
 different points in time, or within different communities.
 
-Early Smalltalk VMs used handles, which they called \emph{object tables}. Though
-the reasons for this are not made it explicit, they used a compacting GC, so it
+Early Smalltalk VMs used handles, generally calling them `object tables'. Though
+the reasons for this are not made it explicit, the VMs that did so used a compacting GC, so it
 is reasonable to assume this was the
-motivation~\cite[p.~18]{krasner83smalltalk}. Handles are also used in VMs that
-descend from that tradition (e.g.~HotSpot~\cite{hotspot07handles}, Dart~\cite{egorovdart}).
+motivation~\cite[p.~18]{krasner83smalltalk}. Handles are often used in VMs that
+descend from the Smalltalk tradition (e.g.~HotSpot~\cite{hotspot07handles}, Dart~\cite{egorovdart}).
 
 To the best of our knowledge, the most comprehensive study of handles
 is~\cite{kalibera11handles} which evaluates different styles of handles in the
@@ -753,8 +758,8 @@ mutator threads may still reference an object's `previous' location,
 necessitating a level of indirection to `direct references' to get the
 current location. They show that, in their context, `thin' or `fat' handles
 were more effective than (their use of the term) `direct references' because it
-allowed objects to be moved without requiring forwarding pointers. This is an
-importantly different context to V8, hence our rather different conclusions.
+allowed objects to be moved without requiring forwarding pointers. This is a
+notably different context to V8, hence our rather different conclusions.
 
 Firefox's JavaScript engine SpiderMonkey uses handles in a similar fashion to
 V8~\cite{spidermonkey}, including similar lints to catch handle misuse.
@@ -768,7 +773,7 @@ practise, fortunately, conservative stack scanning `works', as perhaps best
 evidenced by the long history of the Boehm-Demers-Weiser (BDW)
 GC~\cite{boehm88garbage} which uses conservative scanning for the stack and
 other possible location of GC roots (though note that the first conservative
-scanning GC appears to have been~\cite{caplinger88memory}). BDW has been ported
+scanning GC appears to have been~\cite{caplinger88memory}). BDWGC has been ported
 to most platforms in its long history, and used by a wide variety of software
 (including relatively modern software such as Inkscape): it is plausible that
 its very existence has been the reason why conservative stack scanning
@@ -779,7 +784,7 @@ to find roots on the C stack but is able to precisely trace object slots. This
 is a similar design to that we are proposing for V8 in this paper, though
 Oilpan cannot move objects in the heap.
 
-Safari's underlying engine WebKit (of which the JavaScript VM, JSC, is a part)
+Safari's underlying engine WebKit (of which the JavaScript VM, JavaScriptCore, is a part)
 use direct pointers and conservative stack scanning~\cite{pizlo17riptide},
 which is very similar to what we propose for V8 in this paper. WebKit has had
 at least two different GCs over time (the current GC, \cite{pizlo17riptide},
@@ -789,8 +794,8 @@ moves objects, even across generations (instead using `sticky mark bits' that im
 object as belonging to a certain generation).
 Where V8 only uses precise stack scanning
 for C/C++ code, using stackmaps for JIT compiled code, WebKit uses conservative stack scanning for
-both C/C++ code and JIT compiled code, marginally increasing the chances of
-`accidental' object marking.
+both C/C++ code and JIT compiled code, slightly increasing the chances of
+objects being incorrectly identified as live.
 
 %TODO: Managed language collectors:
 % - Fast CSS: https://users.cecs.anu.edu.au/~steveb/pubs/papers/consrc-oopsla-2014.pdf
@@ -802,12 +807,13 @@ both C/C++ code and JIT compiled code, marginally increasing the chances of
 \section{Conclusions}
 \label{sec:conclusion}
 
-Our results tentatively validate our initial hypothesis: moving from
+Our results tentatively validate our initial hypothesis that moving from
 handles to direct references improves V8's performance. We base this conclusion
 on the fact that we have accurately measured handles performance, but have merely
 provided a lower bound of direct references. It is highly likely that once
 all of V8 is migrated to direct references -- which will remove bottlenecks
-when moving between migrated and unmigrated code -- the measured performance
+when moving between migrated and unmigrated code and, hopefully, have
+led to a more optimised conservative stack scanner -- the measured performance
 of direct references will improve further. When considered together with the fact
 that using direct references removes the potential for handle misuse to
 cause security flaws, we believe that this provides a strong motivation for
