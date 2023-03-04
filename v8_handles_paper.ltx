@@ -534,17 +534,20 @@ JavaScript runtime.
  \bottomrule
  \end{tabular}
  \vspace{6pt}
-\caption{Results from both our experiments: for each we ran \speedometer 30 times and
-     report 99\% confidence intervals. \firstexp is a straightforward
-     comparison between handles and direct references with the GC (largely)
-     running as normal on \speedometer. This implicitly includes the full costs
-     of both handles (creating handles; destroying handles; an extra level of
-     indirection) and direct references (conservative stack scanning). These
-     results clearly show that, within the margin of errors, V8 partly migrated
-     to direct references is no slower than running solely with handles. \secondexp
-     teases out the mutator performance of handles
-     and direct references without gc costs. This clearly shows that, when GC is
-     remove from the equation, direct references are faster.}
+\caption{Results from both our experiments on \speedometer for 30 process executions,
+     where we report 99\% confidence intervals. \firstexp is a straightforward
+     comparison between handles and direct references that establishes a lower
+     bound for direct references performance. This clearly shows that -- even
+     though our migration is incomplete, incurring costs for moving between
+     migrated and unmigrated code, and our conservative stack scanner is naive
+     -- that the lower bound for direct references performance is statistically
+     indistinguishable from handles performance.
+     \secondexp allows us to largely discount the costs of collection (which
+     include our naive stack scanner), focussing on mutator performance. This
+     shows that direct references are \mintotalpdiff faster than handles,
+     giving us greater confidence that a complete migration of V8, and a
+     faster conservative stack scanner, will show that direct references are
+     faster than handles.}
 \label{table:results}
 \end{table*}
 
@@ -559,7 +562,7 @@ spilling registers during a stop-the-world pause.
 
 Our conservative stack scanner tests each word on the call stack to see
 whether values constructed from such words look like pointers to heap object.
-The value are the full word itself and two additinal values for configuratins where V8 compresses pointers.
+The value are the full word itself and two additional values for configuratins where V8 compresses pointers.
 For each value, we first check if the
 value points into a page in the heap; if it doesn't, we can quickly move on.
 If the value does point into a page in the heap, we then check if it points to
