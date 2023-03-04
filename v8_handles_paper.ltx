@@ -63,7 +63,7 @@ In this paper we examine the widely used JavaScript VM V8, which has
 been designed from its inception to use handles. Our hypothesis is
 that moving from handles to direct references (and thus also conservative scanning) will improve V8's performance.
 However, moving wholesale from handles to direct references is impractical on a
-codebase of V8's size (~1.75m lines of code).
+codebase of V8's size (approximately 1.75MLoC).
 Our first challenge was thus
 to find a practical means for gradually migrating parts of V8 from handles to
 direct references (Section~\ref{sec:migration}). Having then migrated a
