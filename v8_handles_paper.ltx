@@ -252,7 +252,7 @@ The young generation uses a semi-space strategy collected by a variant of Halsta
 Objects which have survived one young generation collection are promoted to the old generation.
 A full collection collects both the old and the young generation using a mark-sweep-compact strategy.
 All objects in the young generation that survive a full collection are immediately promoted to the old generation.
-Marking and sweeping are performed concurrently~\cite{degenbaev19}.
+Marking and sweeping are performed concurrently~\cite{degenbaev18cross}.
 Compaction is performed in parallel during the main pause.
 V8 allows its embedder to schedule garbage collections during known program idle times~\cite{degenbaev16idle} which is used by Chrome to improve the user experience.
 
