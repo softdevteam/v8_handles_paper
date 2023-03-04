@@ -558,25 +558,26 @@ before examining the results (\cref{results}).
  \begin{table*}[t]
      \begin{tabular}{lllll}
  \toprule
-    \multirow{2}{*}{Benchmark} & \multicolumn{2}{c}{First Experiment} & \multicolumn{2}{c}{Second Experiment} \\
+    \multirow{2}{*}{Benchmark} & \multicolumn{2}{c}{\firstexp} & \multicolumn{2}{c}{\secondexp} \\
 \cmidrule(l){2-3} \cmidrule(l){4-5}
 & Handles (ms) & Direct Refs (ms) & Handles (ms) & Direct Refs (ms) \\
  \midrule
 \ExpandableInputTwo{./table}
  \bottomrule
  \end{tabular}
-\caption{Results from both ours experiments, we ran \speedometer 30 times and
-     report 99\% confidence intervals. The first experiment is a straightforward
+ \vspace{6pt}
+\caption{Results from both our experiments: for each we ran \speedometer 30 times and
+     report 99\% confidence intervals. \firstexp is a straightforward
      comparison between handles and direct references with the GC (largely)
      running as normal on \speedometer. This implicitly includes the full costs
      of both handles (creating handles; destroying handles; an extra level of
      indirection) and direct references (conservative stack scanning). These
      results clearly show that, within the margin of errors, V8 partly migrated
-     to direct references is no slower than running solely with handles. The
-     second experiment looks at teasing out the mutator performance of handles
-     and direct references without gc costs. This clearly shows that, when gc is
+     to direct references is no slower than running solely with handles. \secondexp
+     teases out the mutator performance of handles
+     and direct references without gc costs. This clearly shows that, when GC is
      remove from the equation, direct references are faster.}
-\label{table:nocompact}
+\label{table:results}
 \end{table*}
 
 The overall question we would like our experiment to answer is: are handles
@@ -590,7 +591,7 @@ collector, and work to move this to a non-moving generational GC has not yet
 been carried out. Fortunately, and despite these restrictions, our experiment
 is able to provide valuable insights.
 
-Our first experiment is a straightforward comparison between handles and direct
+Our first experiment \emph{\firstexp} is a straightforward comparison between handles and direct
 references, with the GC running as normal (subject to the restrictions noted
 earlier). This implicitly includes the full costs of both handles (creating
 handles; destroying handles; an extra level of indirection) and direct
@@ -598,7 +599,7 @@ references (conservative stack scanning). We disable heap
 compaction when a GC is scheduled while there are frames on the C++ stack as it
 does not yet support conservative stack scanning.
 
-Our second experiment aims to tease out the mutator performance of handles and
+Our second experiment \emph{\secondexp} aims to tease out the mutator performance of handles and
 direct references from the costs of running the collector -- in other words,
 what are the costs of creating and destroying handles (whose memory is
 reclaimed manually i.e.~without using the GC) and
@@ -628,35 +629,43 @@ benchmarking and did not observe any oddities such as the machine overheating.
 
 
 \subsection{Results}
-
 \label{results}
 
-\cref{table} \jake{and this} shows the results from our first experiment,
-which is a straightforward comparison of V8 before and after our migration.
-Statistically, this shows V8 with handles to have indistinguishable
-performance from direct references. Since our migration of V8 is only
-partial, this provides a lower bound on direct references performance,
-showing that, at worst, they are no slower than handles.
+\cref{table:results} shows the results for experiments \firstexp and \secondexp.
 
-\cref{table}\jake{We'll need a better way of saying this}  shows the results from our second experiment, where we
-try to take the costs of collection out of the comparison: looked
-at in this way, direct references are \mintotalpdiff faster than handles.
+The results for \firstexp shows that -- even though we have only partly migrated V8,
+that there remain costs for moving between migrated and unmigrated code,
+and our conservative stack scanner is naive -- handles and direct
+references have indistinguishable performance. This establishes a lower bound
+for direct references performance. It is possible (indeed, likely) that
+completing the migration from handles to direct references, and improving the
+performance of the conservative stack scanner, will improve this lower bound.
 
-The second experiment also gives us the best opportunity to understand
+The results for \secondexp show that, by (largely) discounting the costs of collection
+-- which include our naive conservative stack scanner -- and looking solely at
+mutator costs, direct references are \mintotalpdiff faster than handles. This
+gives us greater confidence that the performance results from \firstexp are
+indeed a lower bound for, rather than the maximum potential of, direct
+references.
+
+
+\subsection{Further Analysis}
+
+The V8 variants from \secondexp give us the opportunity to better understand
 the effect of our partial migration. We used Linux's \texttt{perf}
 tool to examine the V8 variants from our second experiment on single runs of
 benchmarks, in essence `diffing' the profiling data. Two benchmarks
 serve as exemplars of the effects of our migration.
 
 The \jquery benchmark (where direct references are \minjquerypdiff faster than handles
-in~\cref{table:min}\jake{needs fixing}),
+in~\cref{table:results}),
 puts particular stress on interactions between
 the Blink's DOM heap and V8's JavaScript heap -- a part of V8 which we almost entirely
 migrated (see~\cref{migrated}). Our profile showed that direct references were
 approximately 15\% faster in these parts of the embedder API.
 
 The \emberjsdebug benchmark (where direct references are statistically
-indisguishable from handles in~\cref{table:min}\jake{needs fixing}) puts stress on: entry to parts
+indistinguishable from handles in~\cref{table:results}) puts stress on: entry to parts
 of the JIT compiler; a section of the inline cache; and JavaScript debug
 objects. Other than small parts of the inline cache, none of these sections of
 V8 have been converted to use direct references. However, each of them interact frequently with parts of V8 we have migrated: in other
